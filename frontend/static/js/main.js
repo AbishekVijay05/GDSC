@@ -1732,6 +1732,16 @@ async function sendChatMessage() {
   const qa = document.getElementById('chat-quick-actions');
   if (qa) qa.style.display = 'flex';
 
+  // Detect if this is a "new_search" intent locally for SSE streaming
+  const isLikelyNewSearch = /^(analyze|analyse|try |search |look up |check |what about )/i.test(message);
+
+  if (isLikelyNewSearch) {
+    // Use SSE streaming for new searches — shows agent progress in real time
+    await sendChatMessageStreamed(message);
+    return;
+  }
+
+  // Fallback to original behavior for non-search messages
   try {
     const res = await fetch('/chat', {
       method: 'POST',
@@ -1798,6 +1808,102 @@ async function sendChatMessage() {
   } finally {
     setChatLoading(false);
   }
+}
+
+// ── Send Message with SSE Streaming ───────────────────────────────────────
+async function sendChatMessageStreamed(message) {
+  return new Promise((resolve) => {
+    try {
+      const body = JSON.stringify({
+        session_id: chatSessionId || '',
+        message: message,
+        language: getLanguage ? getLanguage() : 'en'
+      });
+
+      const xhr = new XMLHttpRequest();
+      xhr.open('POST', '/chat/stream', true);
+      xhr.setRequestHeader('Content-Type', 'application/json');
+
+      let currentSessionId = null;
+
+      xhr.onprogress = function() {
+        const responseText = xhr.responseText;
+        const lines = responseText.split('\n\n');
+
+        for (const line of lines) {
+          if (!line.startsWith('data: ')) continue;
+          const jsonStr = line.slice(6).trim();
+          if (!jsonStr) continue;
+
+          let data;
+          try {
+            data = JSON.parse(jsonStr);
+          } catch (e) {
+            continue; // incomplete JSON, skip
+          }
+
+          const eventType = data.type;
+
+          if (eventType === 'agent_start') {
+            // Agent started working
+            updateAgentFeed({[data.agent]: 'synthesizing'});
+          } else if (eventType === 'agent_complete') {
+            // Agent completed — update feed
+            const statuses = {};
+            statuses[data.agent] = 'complete';
+            updateAgentFeed(statuses);
+            // Show small status message
+            appendChatMessage('system', `${data.agent.charAt(0).toUpperCase() + data.agent.slice(1)} agent complete ✓`);
+          }
+
+          if (data.session_id) {
+            currentSessionId = data.session_id;
+            if (!chatSessionId) {
+              chatSessionId = data.session_id;
+              updateSessionDisplay();
+            }
+          }
+
+          if (eventType === 'complete') {
+            // Final result
+            chatMolecule = data.full_result?.molecule || chatMolecule;
+            if (data.message) appendChatMessage('assistant', data.message);
+            if (data.updated_candidates && data.updated_candidates.length > 0) {
+              appendCandidateCards(data.updated_candidates, chatMolecule);
+            }
+            updateAgentFeed(data.agent_status || {});
+            renderConstraintPills(data.active_constraints || []);
+            setChatLoading(false);
+            updateSessionDisplay();
+            resolve();
+            return; // streaming done
+          }
+        }
+      };
+
+      xhr.onreadystatechange = function() {
+        if (xhr.readyState === 4) {
+          // Process any remaining lines
+          xhr.onprogress();
+          // If we haven't gotten a complete event yet, fall through to resolve
+          setChatLoading(false);
+          resolve();
+        }
+      };
+
+      xhr.onerror = function() {
+        appendChatMessage('error', 'Streaming connection failed. Retrying...');
+        setChatLoading(false);
+        resolve();
+      };
+
+      xhr.send(body);
+    } catch (e) {
+      appendChatMessage('error', 'Streaming failed: ' + e.message);
+      setChatLoading(false);
+      resolve();
+    }
+  });
 }
 
 function sendChatSuggestion(text) {

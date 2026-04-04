@@ -1,4 +1,4 @@
-from flask import Flask, request, jsonify, render_template
+from flask import Flask, request, jsonify, render_template, Response, stream_with_context
 from flask_cors import CORS
 import asyncio, os, time, sys, json
 
@@ -35,7 +35,10 @@ from modules.conversation_state import (
     get_rejected, update_agent_status, set_all_agents,
     set_pipeline_running, get_session_summary, cleanup_expired
 )
-from modules.intent_translator import translate_intent
+from modules.intent_translator import translate_intent, _fallback_parse
+
+# ── Result cache for pipeline outputs ───────────────────────────
+_pipeline_cache = {}
 
 app = Flask(__name__,
     template_folder=os.path.join(os.path.dirname(__file__), "../frontend/templates"),
@@ -188,16 +191,27 @@ def chat():
     try:
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
-        try:
-            intent = loop.run_until_complete(translate_intent(
-                message,
-                current_constraints=session.get("active_constraints", {}),
-                current_results=session.get("last_result"),
-                rejected=[r["drug"] for r in session.get("rejected_candidates", [])]
-            ))
-        finally:
-            loop.close()
-            asyncio.set_event_loop(None)
+        # Use local fallback parser — instant, no LLM API call needed
+        intent = _fallback_parse(message)
+        # Enrich with session context
+        session_constraints = session.get("active_constraints", {})
+        rejected_list = [r["drug"] for r in session.get("rejected_candidates", [])]
+
+        # Check if message is rejecting an already-rejected candidate
+        for drug in rejected_list:
+            if drug.lower() in message.lower():
+                # Already rejected — inform user
+                add_message(session_id, "assistant", f"{drug} has already been excluded from results.")
+                return jsonify({
+                    "session_id": session_id,
+                    "response_type": "update",
+                    "message": f"{drug} has already been excluded from results.",
+                    "intent": "reject_candidate",
+                    "updated_candidates": [],
+                    "active_constraints": list(session_constraints.keys()),
+                    "agent_status": session.get("agent_status", {}),
+                    "clarification_question": None
+                })
 
         intent_type = intent.get("intent_type", "general_question")
         response_msg = intent.get("response_message", "")
@@ -359,6 +373,229 @@ def chat():
         }), 500
 
 
+@app.route("/chat/stream", methods=["POST"])
+def chat_stream():
+    """Streaming version of /chat — uses SSE to show agent progress in real time."""
+    data       = request.get_json()
+    session_id = data.get("session_id", "")
+    message    = data.get("message", "").strip()
+    language   = data.get("language", "en")
+
+    if not message:
+        return jsonify({"error": "No message provided"}), 400
+
+    # Create session if needed
+    if not session_id or not get_session(session_id):
+        session_id, session = create_session()
+    else:
+        session = get_session(session_id)
+
+    # Record user message
+    add_message(session_id, "user", message)
+
+    intent = _fallback_parse(message)
+    intent_type = intent.get("intent_type", "general_question")
+    response_msg = intent.get("response_message", "")
+
+    # For non-search intents, return immediately (no long pipeline to stream)
+    if intent_type != "new_search":
+        # Handle same intents as /chat but without streaming
+        if intent_type == "add_constraint":
+            new_constraints = intent.get("new_constraints", {})
+            if new_constraints:
+                add_constraints(session_id, new_constraints)
+            candidates = []
+            if session.get("last_result"):
+                filtered = _apply_constraints_to_result(
+                    session.get("last_result"), session.get("active_constraints", {}),
+                    session.get("rejected_candidates", []))
+                update_session(session_id, {"last_result": filtered})
+                candidates = _extract_candidates(filtered)
+            add_message(session_id, "assistant", response_msg)
+            result_json = json.dumps({
+                "session_id": session_id, "response_type": "update",
+                "message": response_msg, "intent": intent_type,
+                "updated_candidates": candidates,
+                "active_constraints": list(get_constraints(session_id).keys()),
+                "clarification_question": None
+            })
+            return Response(f"data: {result_json}\n\n", mimetype="text/event-stream")
+
+        elif intent_type == "reject_candidate":
+            for drug in intent.get("rejected_candidates", []):
+                state_reject_candidate(session_id, drug, "User rejected")
+            candidates = []
+            if session.get("last_result"):
+                filtered = _apply_constraints_to_result(
+                    session.get("last_result"), session.get("active_constraints", {}),
+                    session.get("rejected_candidates", []))
+                update_session(session_id, {"last_result": filtered})
+                candidates = _extract_candidates(filtered)
+            add_message(session_id, "assistant", response_msg)
+            result_json = json.dumps({
+                "session_id": session_id, "response_type": "update",
+                "message": response_msg, "intent": intent_type,
+                "updated_candidates": candidates,
+                "active_constraints": list(get_constraints(session_id).keys()),
+                "rejected_candidates": get_rejected(session_id),
+                "clarification_question": None
+            })
+            return Response(f"data: {result_json}\n\n", mimetype="text/event-stream")
+
+        elif intent_type == "ambiguous":
+            cq = intent.get("clarification_question", "Could you be more specific?")
+            update_session(session_id, {"pending_clarification": cq})
+            add_message(session_id, "assistant", cq)
+            result_json = json.dumps({
+                "session_id": session_id, "response_type": "clarification",
+                "message": cq, "intent": intent_type,
+                "active_constraints": list(get_constraints(session_id).keys()),
+                "clarification_question": cq
+            })
+            return Response(f"data: {result_json}\n\n", mimetype="text/event-stream")
+
+        else:  # general_question
+            context = session.get("last_result", {})
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            try:
+                answer = loop.run_until_complete(answer_followup(
+                    message,
+                    {"molecule": session.get("molecule", ""),
+                     "report": context.get("report", {}),
+                     "mechanism": context.get("mechanism", {})},
+                    language
+                ))
+            finally:
+                loop.close()
+                asyncio.set_event_loop(None)
+            add_message(session_id, "assistant", answer)
+            result_json = json.dumps({
+                "session_id": session_id, "response_type": "answer",
+                "message": answer, "intent": intent_type,
+                "active_constraints": list(get_constraints(session_id).keys()),
+                "clarification_question": None
+            })
+            return Response(f"data: {result_json}\n\n", mimetype="text/event-stream")
+
+    # ── new_search intent: stream agent progress ──────────────────────
+    new_mol = intent.get("new_molecule", message.split()[-1]).strip()
+    if not new_mol:
+        new_mol = message
+    update_session(session_id, {"molecule": new_mol})
+    add_message(session_id, "assistant", response_msg)
+
+    def generate():
+        queue = []
+        set_pipeline_running(session_id, True)
+
+        async def run_with_sse():
+            events = queue  # use list as event queue
+            nonlocal new_mol, language, session_id
+            constraints = session.get("active_constraints")
+            rejected_cands = session.get("rejected_candidates")
+
+            async def _sse_emit(agent_name):
+                events.append(json.dumps({
+                    "type": "agent_complete",
+                    "agent": agent_name,
+                    "session_id": session_id
+                }))
+
+            # Run agents one-by-one so we can emit after each
+            agent_map = [
+                ("clinical", fetch_clinical_trials(new_mol)),
+                ("patents", fetch_patents(new_mol)),
+                ("market", fetch_market_data(new_mol)),
+                ("regulatory", fetch_regulatory_data(new_mol)),
+                ("pubmed", fetch_pubmed(new_mol)),
+                ("mechanism", fetch_mechanism_data(new_mol)),
+            ]
+
+            results = {}
+            for name, coro in agent_map:
+                update_agent_status(session_id, name, "searching")
+                try:
+                    results[name] = await asyncio.wait_for(coro, timeout=8)
+                except asyncio.TimeoutError:
+                    results[name] = {"error": f"{name} timed out", "source": name}
+                except Exception as e:
+                    results[name] = {"error": str(e), "source": name}
+                update_agent_status(session_id, name, "complete")
+                events.append(json.dumps({
+                    "type": "agent_complete",
+                    "agent": name,
+                    "session_id": session_id
+                }))
+
+            clinical = results.get("clinical", {})
+            patents = results.get("patents", {})
+            market = results.get("market", {})
+            regulatory = results.get("regulatory", {})
+            pubmed = results.get("pubmed", {})
+            mechanism = results.get("mechanism", {})
+
+            # Synthesis
+            update_agent_status(session_id, "synthesizer", "synthesizing")
+            events.append(json.dumps({"type": "agent_start", "agent": "synthesizer", "session_id": session_id}))
+
+            clinical_ctx = extract_clinical_context(clinical)
+            cross_ctx = build_synthesis_context(new_mol, clinical, patents, market, regulatory, pubmed, clinical_ctx)
+            confidence = compute_confidence(clinical, patents, market, regulatory, mechanism=mechanism, pubmed=pubmed, constraints=constraints, rejected_candidates=rejected_cands)
+            report = await synthesize_report(
+                new_mol, clinical, patents, market, regulatory,
+                cross_ctx, mechanism=mechanism, language=language,
+                constraints=constraints, rejected_candidates=rejected_cands)
+
+            if isinstance(report, dict):
+                report["confidence_score"] = confidence["total"]
+                report["confidence_breakdown"] = confidence["breakdown"]
+                report["confidence_label"] = confidence["label"]
+
+            failure_analysis = analyze_failure_factors(new_mol, clinical, patents, market, regulatory, report)
+            contradictions = detect_contradictions(clinical, patents, market, regulatory, report)
+
+            update_agent_status(session_id, "synthesizer", "complete")
+            events.append(json.dumps({"type": "agent_complete", "agent": "synthesizer", "session_id": session_id}))
+            set_pipeline_running(session_id, False)
+
+            result = {
+                "molecule": new_mol, "language": language,
+                "clinical": clinical, "patents": patents, "market": market,
+                "regulatory": regulatory, "pubmed": pubmed, "mechanism": mechanism,
+                "report": report, "confidence": confidence,
+                "failure_analysis": failure_analysis, "contradictions": contradictions,
+                "clinical_context": clinical_ctx,
+            }
+            _pipeline_cache[(new_mol.lower(), language)] = result
+            update_session(session_id, {"last_result": result, "molecule": new_mol})
+
+            final_json = json.dumps({
+                "type": "complete",
+                "session_id": session_id,
+                "response_type": "new_candidates",
+                "message": f"Analysis complete for {new_mol}.",
+                "updated_candidates": _extract_candidates(result),
+                "active_constraints": list(session.get("active_constraints", {}).keys()),
+                "agent_status": session.get("agent_status", {}),
+                "full_result": result,
+                "clarification_question": None
+            })
+            events.append(final_json)
+
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        try:
+            loop.run_until_complete(run_with_sse())
+        finally:
+            loop.close()
+
+        for item in queue:
+            yield f"data: {item}\n\n"
+
+    return Response(stream_with_context(generate()), mimetype="text/event-stream")
+
+
 @app.route("/reject-candidate", methods=["POST"])
 def reject_candidate_endpoint():
     """Direct candidate rejection endpoint."""
@@ -438,6 +675,25 @@ def remove_constraint_endpoint():
 
 # ── HELPER FUNCTIONS ────────────────────────────────────────────────────────
 
+async def _safe(coro, name):
+    """Wrap a coroutine with a timeout — if it fails, return error dict instead of hanging."""
+    try:
+        return await asyncio.wait_for(coro, timeout=8)
+    except asyncio.TimeoutError:
+        print(f"[Pipeline] {name} timed out, skipping")
+        return {"error": f"{name} timed out", "source": name}
+    except Exception as e:
+        print(f"[Pipeline] {name} failed: {e}")
+        return {"error": str(e), "source": name}
+
+
+@app.route("/clear-cache", methods=["POST"])
+def clear_cache():
+    global _pipeline_cache
+    count = len(_pipeline_cache)
+    _pipeline_cache = {}
+    return jsonify({"cleared": count})
+
 def _extract_candidates(result):
     """Extract candidate list from pipeline result for chat responses."""
     if not result or not isinstance(result, dict):
@@ -511,6 +767,13 @@ def _apply_constraints_to_result(result, constraints, rejected_candidates):
 
 async def run_pipeline(molecule, language="en", session_id=None, constraints=None, rejected_candidates=None):
     t0 = time.time()
+    cache_key = (molecule.lower(), language)
+
+    # Check result cache — returns instantly if already analyzed
+    if cache_key in _pipeline_cache:
+        print(f"[Pipeline] Cache hit: {molecule} [{language}]")
+        return _pipeline_cache[cache_key]
+
     print(f"[Pipeline] Starting: {molecule} [{language}]")
 
     # Update agent statuses if session exists
@@ -521,15 +784,16 @@ async def run_pipeline(molecule, language="en", session_id=None, constraints=Non
         update_agent_status(session_id, "regulatory", "searching")
         update_agent_status(session_id, "pubmed", "searching")
         update_agent_status(session_id, "mechanism", "searching")
+    update_agent_status(session_id, "synthesizer", "idle")
 
-    # Stage 1 — 6 agents fire simultaneously
+    # Stage 1 — 6 agents fire simultaneously with individual timeouts
     clinical, patents, market, regulatory, pubmed, mechanism = await asyncio.gather(
-        fetch_clinical_trials(molecule),
-        fetch_patents(molecule),
-        fetch_market_data(molecule),
-        fetch_regulatory_data(molecule),
-        fetch_pubmed(molecule),
-        fetch_mechanism_data(molecule)
+        _safe(fetch_clinical_trials(molecule), "Clinical"),
+        _safe(fetch_patents(molecule), "Patents"),
+        _safe(fetch_market_data(molecule), "Market"),
+        _safe(fetch_regulatory_data(molecule), "Regulatory"),
+        _safe(fetch_pubmed(molecule), "PubMed"),
+        _safe(fetch_mechanism_data(molecule), "Mechanism"),
     )
 
     if session_id:
@@ -573,7 +837,7 @@ async def run_pipeline(molecule, language="en", session_id=None, constraints=Non
     elapsed = round(time.time() - t0, 1)
     print(f"[Pipeline] Done in {elapsed}s: {molecule} [{language}]")
 
-    return {
+    result = {
         "molecule":         molecule,
         "language":         language,
         "clinical":         clinical,
@@ -589,6 +853,10 @@ async def run_pipeline(molecule, language="en", session_id=None, constraints=Non
         "clinical_context": clinical_ctx,
         "elapsed_seconds":  elapsed
     }
+
+    # Cache result for instant repeat lookups
+    _pipeline_cache[cache_key] = result
+    return result
 
 
 if __name__ == "__main__":

@@ -2,7 +2,16 @@ import aiohttp, json, os
 
 # ── NVIDIA NIM API ─────────────────────────────────────────────────────────
 NVIDIA_API_URL = "https://integrate.api.nvidia.com/v1/chat/completions"
-NVIDIA_MODEL   = "meta/llama-3.1-70b-instruct"
+# Use 8B model — faster and usually sufficient
+NVIDIA_MODEL   = "meta/llama-3.1-8b-instruct"
+
+# Cache synthesis results so we never repeat an expensive call
+_synthesis_cache = {}
+
+# Skip NVIDIA LLM entirely — use fast heuristic-based report from live data.
+# The LLM call is 30-50s; the heuristic report is instant (~0ms).
+# Set to False if you want AI-powered deep analysis and don't mind the wait.
+FAST_MODE = os.environ.get("FAST_MODE", "true").lower() == "true"
 
 LANGUAGE_INSTRUCTIONS = {
     "en": "Respond in English.",
@@ -20,12 +29,20 @@ LANGUAGE_INSTRUCTIONS = {
 
 async def synthesize_report(molecule, clinical, patents, market, regulatory,
                              cross_domain_context="", mechanism=None, language="en",
-                             overlap_data=None, similarity=None, constraints=None, 
+                             overlap_data=None, similarity=None, constraints=None,
                              rejected_candidates=None) -> dict:
+
+    if FAST_MODE:
+        return _fast_report(molecule, clinical, patents, market, regulatory, mechanism, language, constraints, rejected_candidates)
 
     api_key = os.environ.get("NVIDIA_API_KEY", "")
     if not api_key or not api_key.startswith("nvapi-"):
         return _mock_report(molecule)
+
+    # Check synthesis cache — avoid repeat expensive LLM calls
+    cache_key = (molecule.lower(), language, bool(constraints), bool(rejected_candidates))
+    if cache_key in _synthesis_cache:
+        return _synthesis_cache[cache_key]
 
     lang_instruction = LANGUAGE_INSTRUCTIONS.get(language, LANGUAGE_INSTRUCTIONS["en"])
 
@@ -56,96 +73,69 @@ Drug-likeness (Lipinski): {mechanism.get('drug_likeness', {}).get('assessment', 
 """
 
     prompt = f"""You are an expert pharmaceutical researcher specializing in drug repurposing.
-Analyze the following multi-domain data about the molecule: {molecule}
+Analyze the following data about {molecule} and generate a JSON report.
 
 {lang_instruction}
 
 {constraint_str}
---- CLINICAL TRIALS DATA ---
-Total trials found: {clinical.get('total_found', 0) or len(clinical.get('trials', []))}
-Trials: {json.dumps(clinical.get('trials', [])[:5], indent=2)}
+--- CLINICAL TRIALS ---
+Total: {clinical.get('total_found', 0)}
+Samples: {_compact(clinical.get('trials', [])[:3])}
 
---- PATENT DATA ---
-Total patents: {patents.get('total_patents', 0)}
-Sample patents: {json.dumps(patents.get('patents', [])[:3], indent=2)}
+--- PATENTS ---
+Total: {patents.get('total_patents', 0)}
+{_compact(patents.get('patents', [])[:2])}
 
---- MARKET DATA ---
-Products found: {market.get('products_found', 0)}
-Adverse event reports: {market.get('adverse_event_reports', 0):,}
-Market insight: {market.get('market_insight', '')}
+--- MARKET ---
+Products: {market.get('products_found', 0)}
+Adverse events: {market.get('adverse_event_reports', 0):,}
+Insight: {market.get('market_insight', '')}
 
---- REGULATORY DATA ---
-Current indications: {json.dumps(regulatory.get('current_indications', [])[:2], indent=2)}
-Warnings: {json.dumps(regulatory.get('warnings', [])[:2], indent=2)}
-Contraindications: {json.dumps(regulatory.get('contraindications', [])[:2], indent=2)}
+--- REGULATORY ---
+Indications: {json.dumps(regulatory.get('current_indications', [])[:2], ensure_ascii=False)}
+Warnings: {json.dumps(regulatory.get('warnings', [])[:1], ensure_ascii=False)}
 
 {mech_context}
-
 --- CROSS-DOMAIN CONTEXT ---
-{cross_domain_context}
+{_truncate(cross_domain_context, 800)}
 
-Generate a comprehensive drug repurposing analysis. Respond ONLY with valid JSON — no markdown fences, no extra text, just the JSON object.
+Generate a comprehensive repurposing analysis. Respond ONLY with valid JSON:
 
 {{
-  "executive_summary": "2-3 sentences summarising repurposing potential",
-  "biological_possibility_statement": "3-5 sentences explaining WHY this compound COULD biologically work for a new indication. Reference the molecular formula, mechanism of action, and biological targets. Be specific.",
+  "executive_summary": "2-3 sentences",
+  "biological_possibility_statement": "3-5 sentences on WHY this compound could work for a new indication. Reference specific targets/mechanism.",
   "repurposing_opportunities": [
     {{
       "disease": "Specific disease name",
-      "description": "Why this drug could treat this disease",
-      "biological_rationale": "Specific biological/chemical reason — mention targets, pathways, molecular mechanism",
+      "description": "Why this drug could treat it",
+      "biological_rationale": "Specific biological/chemical reason with targets/pathways",
       "confidence": "HIGH or MODERATE or INVESTIGATE",
       "confidence_score": 82,
       "trial_id": "NCT number or null",
-      "trial_phase": "Phase 1 or Phase 2 or Phase 3 or Phase 4 or null",
+      "trial_phase": "Phase 1 or Phase 2 or null",
       "market_gap": "Unmet need or commercial opportunity",
       "patent_status": "Free to use or Patent protected or Expired or Unknown",
-      "why_not_pursued_yet": "Honest reason this has not been developed yet",
+      "why_not_pursued_yet": "Real reason not developed yet",
       "source": "ClinicalTrials.gov or PubMed or OpenFDA"
     }}
   ],
-  "why_not_pursued_analysis": "Honest paragraph explaining real barriers — patent walls, failed trials, safety concerns, ROI issues, or undiscovered opportunity",
+  "why_not_pursued_analysis": "Honest explanation of barriers",
   "negative_cases": [
     {{
-      "disease": "Disease this drug will NOT work for",
-      "reason": "Specific biological or clinical reason",
-      "evidence": "Data point supporting this"
+      "disease": "Disease this won't work for",
+      "reason": "Specific reason",
+      "evidence": "Data point"
     }}
   ],
-  "unmet_needs": {{
-    "finding": "Specific unmet medical need",
-    "evidence": "Cite trial IDs or data points",
-    "source": "ClinicalTrials.gov or OpenFDA"
-  }},
-  "pipeline_status": {{
-    "finding": "Current clinical pipeline status",
-    "evidence": "Specific trial numbers and phases",
-    "source": "ClinicalTrials.gov"
-  }},
-  "patent_landscape": {{
-    "finding": "Patent situation and freedom to operate",
-    "evidence": "Based on {patents.get('total_patents', 0)} patents found",
-    "source": "PubChem"
-  }},
-  "market_potential": {{
-    "finding": "Commercial opportunity assessment",
-    "evidence": "Based on {market.get('adverse_event_reports', 0):,} adverse event reports",
-    "source": "OpenFDA"
-  }},
-  "strategic_recommendation": {{
-    "verdict": "PURSUE or INVESTIGATE FURTHER or LOW PRIORITY",
-    "reasoning": "Specific reasoning combining all domains including biology",
-    "next_steps": ["Step 1", "Step 2", "Step 3"]
-  }},
-  "evidence_card": {{
-    "molecular_logic": "Explain the structural reason, e.g. similar to X drug",
-    "genetic_pathway": "Explain the shared genetic pathway overlap",
-    "side_effect_proxy": "Explain if side effects provide a hint for new use",
-    "reasoning_path": ["Data point 1: X source shows Y", "Data point 2: Z biological target match", "Data point 3: Clinical signal in W population"]
-  }},
+  "unmet_needs": {{"finding": "Specific need", "evidence": "Data point", "source": "ClinicalTrials.gov or OpenFDA"}},
+  "pipeline_status": {{"finding": "Pipeline status", "evidence": "Trial numbers", "source": "ClinicalTrials.gov"}},
+  "patent_landscape": {{"finding": "Patent situation", "evidence": "Based on {patents.get('total_patents', 0)} patents", "source": "PubChem"}},
+  "market_potential": {{"finding": "Commercial opportunity", "evidence": "Based on {market.get('adverse_event_reports', 0):,} adverse events", "source": "OpenFDA"}},
+  "strategic_recommendation": {{"verdict": "PURSUE or INVESTIGATE FURTHER or LOW PRIORITY", "reasoning": "Why", "next_steps": ["Step 1", "Step 2", "Step 3"]}},
+  "evidence_card": {{"molecular_logic": "Structural reason", "genetic_pathway": "Shared pathway", "side_effect_proxy": "Side effect hint", "reasoning_path": ["Data 1", "Data 2", "Data 3"]}},
   "confidence_score": 70,
   "key_risks": ["Risk 1", "Risk 2"],
-  "cross_domain_insight": "The one insight only visible when combining all 5 data sources",
+  "cross_domain_insight": "One insight only visible when combining all data sources",
   "language": "{language}"
 }}"""
 
@@ -157,13 +147,13 @@ Generate a comprehensive drug repurposing analysis. Respond ONLY with valid JSON
             }
             payload = {
                 "model": NVIDIA_MODEL,
-                "max_tokens": 2500,
+                "max_tokens": 1500,  # reduced from 2500 — faster response
                 "temperature": 0.3,
                 "messages": [{"role": "user", "content": prompt}]
             }
             async with session.post(
                 NVIDIA_API_URL, headers=headers, json=payload,
-                timeout=aiohttp.ClientTimeout(total=60)
+                timeout=aiohttp.ClientTimeout(total=30)  # reduced from 60
             ) as resp:
                 if resp.status == 200:
                     data = await resp.json()
@@ -174,7 +164,9 @@ Generate a comprehensive drug repurposing analysis. Respond ONLY with valid JSON
                         text  = parts[1]
                         if text.startswith("json"):
                             text = text[4:]
-                    return json.loads(text.strip())
+                    result = json.loads(text.strip())
+                    _synthesis_cache[cache_key] = result
+                    return result
                 else:
                     body = await resp.text()
                     print(f"[Synthesizer] NVIDIA API error {resp.status}: {body[:300]}")
@@ -186,6 +178,194 @@ Generate a comprehensive drug repurposing analysis. Respond ONLY with valid JSON
     except Exception as e:
         print(f"[Synthesizer] Error: {e}")
         return _mock_report(molecule, error=str(e))
+
+
+def _fast_report(molecule, clinical, patents, market, regulatory, mechanism,
+                 language, constraints, rejected):
+    """Build repurposing report from live data — instant, no LLM call (~0ms)."""
+    trials = clinical.get("trials", []) if clinical and isinstance(clinical, dict) else []
+    if clinical.get("error") and not trials:
+        trials = []
+    trial_total = clinical.get("total_found", 0) if clinical and isinstance(clinical, dict) else 0
+    trial_count = len(trials)
+    conditions_set = set()
+    phases_set = set()
+    for t in trials:
+        conditions_set.update(t.get("conditions", []))
+        p = t.get("phase", "N/A")
+        if p != "N/A":
+            phases_set.add(p)
+    conditions = sorted(conditions_set)[:20]
+    phases = sorted(phases_set)
+
+    patent_total = patents.get("total_patents", 0) if patents and isinstance(patents, dict) else 0
+    products = market.get("products_found", 0) if market and isinstance(market, dict) else 0
+    events = market.get("adverse_event_reports", 0) if market and isinstance(market, dict) else 0
+    approvals = regulatory.get("approvals", []) if regulatory and isinstance(regulatory, dict) else []
+    approved = len(approvals) > 0
+
+    # Clinical scoring
+    if trial_count >= 10:
+        clinical_label, clinical_score = "Strong clinical evidence", 85
+    elif trial_count >= 5:
+        clinical_label, clinical_score = "Moderate clinical evidence", 65
+    elif trial_count >= 1:
+        clinical_label, clinical_score = "Limited clinical data", 40
+    else:
+        clinical_label, clinical_score = "No clinical trials", 15
+
+    # Patent scoring
+    if patent_total <= 3:
+        patent_label, patent_score = "Low patent burden", 80
+    elif patent_total <= 10:
+        patent_label, patent_score = "Moderate patent landscape", 60
+    else:
+        patent_label, patent_score = "Heavy patent protection", 30
+
+    # Market scoring
+    if products > 0:
+        market_label, market_score = f"Established market ({products} products)", 80
+    elif events > 1000:
+        market_label, market_score = "Large patient base", 60
+    elif events > 0:
+        market_label, market_score = f"Limited usage ({events:,} reports)", 40
+    else:
+        market_label, market_score = "No commercial presence", 15
+
+    # Regulatory scoring
+    reg_label = "FDA approved" if approved else "No FDA approval data"
+    reg_score = 80 if approved else 30
+
+    total = round((clinical_score * 0.35) + (patent_score * 0.25) + (market_score * 0.25) + (reg_score * 0.15))
+
+    if total >= 70:
+        overall, verdict = "HIGH CONFIDENCE", "PURSUE"
+    elif total >= 45:
+        overall, verdict = "MODERATE CONFIDENCE", "INVESTIGATE FURTHER"
+    else:
+        overall, verdict = "LOW CONFIDENCE", "LOW PRIORITY"
+
+    cond_str = ", ".join(conditions[:5]) if conditions else "Unknown conditions"
+
+    opportunities = _build_opps(molecule, trials, conditions, patent_total)
+
+    risks = []
+    if not approved and trial_count < 3:
+        risks.append("Limited clinical trial data — regulatory pathway uncertain")
+    if patent_total > 10:
+        risks.append("Heavy patent coverage may limit freedom to operate")
+    if not risks:
+        risks.append("Monitor post-market safety signals")
+
+    return {
+        "executive_summary": (
+            f"{molecule} shows {overall.lower()} for repurposing with a confidence score of {total}%. "
+            f"{clinical_label} detected across {trial_total} clinical trials. "
+            f"{patent_label} with {patent_total} patents. "
+            f"{market_label}. {'Currently FDA approved.' if approved else 'Not currently FDA approved.'}"
+        ),
+        "biological_possibility_statement": (
+            f"{molecule} has been studied in {trial_count} trials across {len(conditions)} condition(s): {cond_str}. "
+            f"Repurposing opportunities exist in related therapeutic areas where the same biological pathways apply."
+        ),
+        "repurposing_opportunities": opportunities,
+        "why_not_pursued_analysis": (
+            f"Repurposing may have been limited by {'lack of regulatory clarity' if not approved else 'patent barriers'}. "
+            f"Only {trial_count} trial(s) found across {trial_total} total studies."
+        ),
+        "negative_cases": [],
+        "unmet_needs": {
+            "finding": f"Unmet need in {'; '.join(conditions[:3])}" if conditions else "Unmet need in related indications",
+            "evidence": f"{trial_total} trials found",
+            "source": "ClinicalTrials.gov"
+        },
+        "pipeline_status": {
+            "finding": f"{trial_count} trials, phases: {', '.join(phases) if phases else 'Unknown'}",
+            "evidence": f"Total: {trial_total} reports",
+            "source": "ClinicalTrials.gov"
+        },
+        "patent_landscape": {
+            "finding": patent_label,
+            "evidence": f"{patent_total} patents found",
+            "source": "PubChem"
+        },
+        "market_potential": {
+            "finding": market_label,
+            "evidence": f"{events:,} adverse events, {products} products",
+            "source": "OpenFDA"
+        },
+        "strategic_recommendation": {
+            "verdict": verdict,
+            "reasoning": f"Based on {trial_count} trials, {patent_total} patents, {products} products, {events:,} adverse events",
+            "next_steps": [
+                f"Review {trial_count} clinical trials for repurposing signals",
+                "Assess patent freedom for target indications",
+                "Evaluate market size for top repurposing candidates"
+            ]
+        },
+        "evidence_card": {
+            "molecular_logic": f"{molecule} — {'Approved compound' if approved else 'Investigational compound'} with {trial_total} clinical reports",
+            "genetic_pathway": f"Shared pathways in {'; '.join(conditions[:3])}" if conditions else "Pathway analysis pending",
+            "side_effect_proxy": "Limited safety data" if not approvals else "Safety profile available from approved use",
+            "reasoning_path": [
+                f"Clinical: {trial_total} reports, {trial_count} trials in phases {', '.join(phases) if phases else 'Unknown'}",
+                f"Patents: {patent_total} filings — {patent_label.lower()}",
+                f"Market: {events:,} adverse events across {products} products"
+            ]
+        },
+        "confidence_score": total,
+        "key_risks": risks,
+        "cross_domain_insight": (
+            f"{molecule}: {clinical_label.lower()} × {patent_label.lower()}. "
+            f"{'Approved & market-established' if approved and products > 0 else 'Repurposing potential depends on new trial design'}."
+        ),
+        "language": language,
+        "fast_mode": True,
+    }
+
+
+def _build_opps(molecule, trials, conditions, patent_total):
+    """Generate repurposing opportunities from live clinical trial data."""
+    opps = []
+    unique_conds = set()
+    for t in trials:
+        for c in t.get("conditions", []):
+            unique_conds.add(c.strip().lower())
+
+    unique_conds = [c for c in sorted(unique_conds) if c and len(c) > 3 and molecule.lower() not in c.lower()][:6]
+
+    for cond in unique_conds:
+        trials_match = [t for t in trials if any(c.strip().lower() == cond for c in t.get("conditions", []))]
+        count = len(trials_match)
+        best_trial = trials_match[0] if trials_match else {}
+        nct = best_trial.get("nct_id", "")
+        phase = best_trial.get("phase", "N/A") if best_trial.get("phase", "N/A") != "N/A" else None
+        status = best_trial.get("status", "Unknown")
+
+        has_late_phase = any("Phase 3" in t.get("phase", "") or "Phase 4" in t.get("phase", "") for t in trials_match)
+        if has_late_phase or count >= 3:
+            conf, score = "MODERATE", 65
+        else:
+            conf, score = "INVESTIGATE", 35
+
+        pat_status = "Free to use" if patent_total <= 3 else "Patent protected"
+
+        opps.append({
+            "disease": cond.title(),
+            "description": f"{count} trial(s) found for {cond.title()} involving {molecule}.",
+            "biological_rationale": (
+                f"Clinical evidence: {molecule} tested in {count} trial(s) for {cond.title()}. Status: {status}"
+            ),
+            "confidence": conf,
+            "confidence_score": score,
+            "trial_id": nct,
+            "trial_phase": phase,
+            "market_gap": f"Unmet therapeutic need in {cond.title()}",
+            "patent_status": pat_status,
+            "source": "ClinicalTrials.gov"
+        })
+
+    return opps
 
 
 def _mock_report(molecule, error=None):
@@ -226,3 +406,15 @@ def _mock_report(molecule, error=None):
         "cross_domain_insight": note,
         "language": "en"
     }
+
+
+def _compact(items, limit=200):
+    """Compact a list of dicts into a short string for the prompt."""
+    text = json.dumps(items, ensure_ascii=False)
+    return text if len(text) <= limit else text[:limit] + "..."
+
+
+def _truncate(text, max_len=500):
+    if text and len(text) > max_len:
+        return text[:max_len] + "..."
+    return text or "Not available"

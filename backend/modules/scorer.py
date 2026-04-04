@@ -4,7 +4,8 @@ Multi-dimensional: Biological + Clinical + Literature + Safety + Novelty
 """
 
 def compute_confidence(clinical, patents, market, regulatory,
-                       mechanism=None, target_overlap=None, pubmed=None) -> dict:
+                       mechanism=None, target_overlap=None, pubmed=None,
+                       constraints=None, rejected_candidates=None) -> dict:
     scores = {}
     explanations = {}
 
@@ -98,6 +99,19 @@ def compute_confidence(clinical, patents, market, regulatory,
     explanations["novelty"] = nov_exp or ["Standard novelty level"]
 
     total_score = sum(scores.values())
+
+    # Apply penalty for constrained items to lower the overall confidence
+    # if the AI is returning candidates that might be violating constraints
+    constraint_penalty = 0
+    if constraints and 'exclude_high_toxicity' in constraints and scores['safety'] < 10:
+        constraint_penalty = 15
+        explanations['safety'].append("PENALTY: User toxicity constraint violation")
+    if constraints and 'exclude_cardiovascular_toxicity' in constraints and scores['safety'] < 12:
+        constraint_penalty = 10
+        explanations['safety'].append("PENALTY: User cardiovascular constraint violation")
+    
+    total_score = max(0, total_score - constraint_penalty)
+
     label = ("HIGH CONFIDENCE" if total_score>=75 else
              "MODERATE CONFIDENCE" if total_score>=50 else
              "LOW CONFIDENCE" if total_score>=25 else "INSUFFICIENT DATA")

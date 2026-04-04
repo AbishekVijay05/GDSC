@@ -20,13 +20,26 @@ LANGUAGE_INSTRUCTIONS = {
 
 async def synthesize_report(molecule, clinical, patents, market, regulatory,
                              cross_domain_context="", mechanism=None, language="en",
-                             overlap_data=None, similarity=None) -> dict:
+                             overlap_data=None, similarity=None, constraints=None, 
+                             rejected_candidates=None) -> dict:
 
     api_key = os.environ.get("NVIDIA_API_KEY", "")
     if not api_key or not api_key.startswith("nvapi-"):
         return _mock_report(molecule)
 
     lang_instruction = LANGUAGE_INSTRUCTIONS.get(language, LANGUAGE_INSTRUCTIONS["en"])
+
+    constraint_str = ""
+    if constraints or rejected_candidates:
+        constraint_str = "--- USER CONSTRAINTS & REJECTIONS ---\n"
+        if rejected_candidates:
+            rejected = [r['drug'] if isinstance(r, dict) else r for r in rejected_candidates]
+            constraint_str += f"Strictly EXCLUDE these candidates from repurposing opportunities: {', '.join(rejected)}\n"
+        if constraints:
+            constraint_str += "STRICTLY OBEY these constraints:\n"
+            for k, v in constraints.items():
+                constraint_str += f"- {k}: {v}\n"
+        constraint_str += "\n"
 
     mech_context = ""
     if mechanism and not mechanism.get("error"):
@@ -47,6 +60,7 @@ Analyze the following multi-domain data about the molecule: {molecule}
 
 {lang_instruction}
 
+{constraint_str}
 --- CLINICAL TRIALS DATA ---
 Total trials found: {clinical.get('total_found', 0) or len(clinical.get('trials', []))}
 Trials: {json.dumps(clinical.get('trials', [])[:5], indent=2)}

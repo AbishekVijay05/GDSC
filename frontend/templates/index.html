@@ -19,6 +19,7 @@
     <button class="tab-btn active" onclick="switchTab('home')">Home</button>
     <button class="tab-btn" onclick="switchTab('explore')">Explore</button>
     <button class="tab-btn" onclick="switchTab('repurpose')">Repurpose</button>
+    <button class="tab-btn" onclick="switchTab('chat')">Chat</button>
     <button class="tab-btn" onclick="switchTab('test')">Test</button>
     <button class="tab-btn" onclick="switchTab('about')">About</button>
     <button class="tab-btn" onclick="switchTab('help')">Help</button>
@@ -154,6 +155,120 @@
       </div>
     </div>
   </section>
+</div>
+
+<!-- TAB: CHAT -->
+<div id="chat-panel" class="tab-panel">
+  <div class="chat-layout">
+
+    <!-- MAIN CHAT AREA -->
+    <div class="chat-main">
+      <!-- Constraint pills bar -->
+      <div class="chat-constraints-bar" id="chat-constraints-bar">
+        <div class="constraints-label">Active Constraints</div>
+        <div class="constraints-pills" id="constraints-pills">
+          <span class="constraint-empty" id="constraint-empty">No active constraints — start a conversation to add filters</span>
+        </div>
+      </div>
+
+      <!-- Messages area -->
+      <div class="chat-messages" id="chat-messages">
+        <div class="chat-welcome">
+          <div class="chat-welcome-icon">&#9883;</div>
+          <h3>Conversational Research Partner</h3>
+          <p>Start by analyzing a drug, then refine results through natural conversation. Try:</p>
+          <div class="chat-suggestions">
+            <button class="chat-suggest-btn" onclick="sendChatSuggestion('Analyze Metformin')">Analyze Metformin</button>
+            <button class="chat-suggest-btn" onclick="sendChatSuggestion('Analyze Rapamycin')">Analyze Rapamycin</button>
+            <button class="chat-suggest-btn" onclick="sendChatSuggestion('Analyze Sildenafil')">Analyze Sildenafil</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Quick action buttons -->
+      <div class="chat-quick-actions" id="chat-quick-actions" style="display:none">
+        <button class="quick-action-btn" onclick="sendChatSuggestion('Must cross blood-brain barrier')">&#128300; Require BBB crossing</button>
+        <button class="quick-action-btn" onclick="sendChatSuggestion('Be gentler on the heart')">&#10084; Gentler on heart</button>
+        <button class="quick-action-btn" onclick="sendChatSuggestion('Prefer patent-free candidates')">&#128274; Patent-free only</button>
+        <button class="quick-action-btn" onclick="sendChatSuggestion('What is the biggest risk?')">&#9888; Biggest risk?</button>
+      </div>
+
+      <!-- Input area -->
+      <div class="chat-input-area">
+        <input type="text" id="chat-input" placeholder="Ask anything — 'analyze Aspirin', 'be gentler on the heart', 'reject Metformin'..." autocomplete="off" />
+        <button class="chat-send-btn" id="chat-send-btn" onclick="sendChatMessage()">
+          <span>&#10148;</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- AGENT ACTIVITY SIDEBAR -->
+    <div class="chat-sidebar" id="chat-sidebar">
+      <div class="sidebar-header">
+        <span class="sidebar-title">Agent Activity</span>
+        <button class="sidebar-toggle" onclick="toggleChatSidebar()" title="Toggle sidebar">&#9776;</button>
+      </div>
+      <div class="sidebar-body" id="sidebar-body">
+        <div class="sidebar-section">
+          <div class="sidebar-section-title">Pipeline Status</div>
+          <div class="agent-feed" id="agent-feed">
+            <div class="agent-feed-item" id="feed-clinical">
+              <div class="agent-feed-dot idle"></div>
+              <div class="agent-feed-name">Clinical</div>
+              <div class="agent-feed-status">Idle</div>
+            </div>
+            <div class="agent-feed-item" id="feed-patents">
+              <div class="agent-feed-dot idle"></div>
+              <div class="agent-feed-name">Patents</div>
+              <div class="agent-feed-status">Idle</div>
+            </div>
+            <div class="agent-feed-item" id="feed-market">
+              <div class="agent-feed-dot idle"></div>
+              <div class="agent-feed-name">Market</div>
+              <div class="agent-feed-status">Idle</div>
+            </div>
+            <div class="agent-feed-item" id="feed-regulatory">
+              <div class="agent-feed-dot idle"></div>
+              <div class="agent-feed-name">Regulatory</div>
+              <div class="agent-feed-status">Idle</div>
+            </div>
+            <div class="agent-feed-item" id="feed-pubmed">
+              <div class="agent-feed-dot idle"></div>
+              <div class="agent-feed-name">Literature</div>
+              <div class="agent-feed-status">Idle</div>
+            </div>
+            <div class="agent-feed-item" id="feed-mechanism">
+              <div class="agent-feed-dot idle"></div>
+              <div class="agent-feed-name">Mechanism</div>
+              <div class="agent-feed-status">Idle</div>
+            </div>
+            <div class="agent-feed-item" id="feed-synthesizer">
+              <div class="agent-feed-dot idle"></div>
+              <div class="agent-feed-name">Synthesizer</div>
+              <div class="agent-feed-status">Idle</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="sidebar-section">
+          <div class="sidebar-section-title">Rejected Candidates</div>
+          <div class="rejected-list" id="rejected-list">
+            <div class="rejected-empty">No rejected candidates yet</div>
+          </div>
+        </div>
+
+        <div class="sidebar-section">
+          <div class="sidebar-section-title">Session Info</div>
+          <div class="session-info" id="session-info">
+            <div class="session-info-item"><span>Session:</span><span id="session-id-display">—</span></div>
+            <div class="session-info-item"><span>Molecule:</span><span id="session-mol-display">—</span></div>
+            <div class="session-info-item"><span>Messages:</span><span id="session-msg-count">0</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
 </div>
 
 <!-- TAB: TEST -->

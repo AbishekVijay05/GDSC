@@ -1708,3 +1708,424 @@ async function submitStudentTest() {
     resContainer.innerHTML = `<div style="text-align:center; color:var(--danger); padding:40px;">Validation API failed. Check backend connection.</div>`;
   }
 }
+
+// ═══════════════════════════════════════════════════════════════════════════
+// ═══ CONVERSATIONAL CHAT SYSTEM ═══════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════════════════════
+
+let chatSessionId = null;
+let chatMolecule = null;
+let chatPollingInterval = null;
+let chatMessageCount = 0;
+
+// ── Send Message ──────────────────────────────────────────────────────────
+async function sendChatMessage() {
+  const input = document.getElementById('chat-input');
+  const message = input.value.trim();
+  if (!message) return;
+
+  input.value = '';
+  appendChatMessage('user', message);
+  setChatLoading(true);
+
+  // Show quick actions after first message
+  const qa = document.getElementById('chat-quick-actions');
+  if (qa) qa.style.display = 'flex';
+
+  try {
+    const res = await fetch('/chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        session_id: chatSessionId || '',
+        message: message,
+        language: getLanguage ? getLanguage() : 'en'
+      })
+    });
+
+    if (!res.ok) throw new Error(`Server error ${res.status}`);
+    const data = await res.json();
+
+    // Store session
+    if (data.session_id) {
+      chatSessionId = data.session_id;
+      updateSessionDisplay();
+    }
+
+    // Handle response types
+    const responseType = data.response_type;
+
+    if (responseType === 'new_candidates') {
+      chatMolecule = data.full_result?.molecule || chatMolecule;
+      appendChatMessage('assistant', data.message);
+      if (data.updated_candidates && data.updated_candidates.length > 0) {
+        appendCandidateCards(data.updated_candidates, chatMolecule);
+      }
+      // Start polling for agent status
+      startAgentPolling();
+      updateAgentFeed(data.agent_status || {});
+
+    } else if (responseType === 'update') {
+      appendChatMessage('assistant', data.message);
+      if (data.updated_candidates && data.updated_candidates.length > 0) {
+        appendCandidateCards(data.updated_candidates, chatMolecule);
+      } else {
+        appendChatMessage('system', 'All candidates filtered out by current constraints. Try relaxing some filters.');
+      }
+
+    } else if (responseType === 'clarification') {
+      appendChatMessage('clarification', data.clarification_question || data.message);
+
+    } else if (responseType === 'answer') {
+      appendChatMessage('assistant', data.message);
+
+    } else if (responseType === 'error') {
+      appendChatMessage('error', data.message);
+    }
+
+    // Update constraints display
+    renderConstraintPills(data.active_constraints || []);
+
+    // Update rejected list
+    if (data.rejected_candidates) {
+      renderRejectedList(data.rejected_candidates);
+    }
+
+    updateSessionDisplay();
+
+  } catch (e) {
+    appendChatMessage('error', 'Failed to send message: ' + e.message);
+  } finally {
+    setChatLoading(false);
+  }
+}
+
+function sendChatSuggestion(text) {
+  const input = document.getElementById('chat-input');
+  if (input) {
+    input.value = text;
+    sendChatMessage();
+  }
+}
+
+// ── Render Messages ───────────────────────────────────────────────────────
+function appendChatMessage(role, content) {
+  const container = document.getElementById('chat-messages');
+  if (!container) return;
+
+  // Remove welcome screen
+  const welcome = container.querySelector('.chat-welcome');
+  if (welcome) welcome.remove();
+
+  const msgDiv = document.createElement('div');
+  msgDiv.className = `chat-msg chat-msg-${role}`;
+
+  const now = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+  if (role === 'user') {
+    msgDiv.innerHTML = `
+      <div class="chat-msg-bubble user-bubble">
+        <div class="chat-msg-content">${escapeHtml(content)}</div>
+        <div class="chat-msg-time">${now}</div>
+      </div>
+      <div class="chat-msg-avatar user-avatar">You</div>`;
+  } else if (role === 'assistant') {
+    msgDiv.innerHTML = `
+      <div class="chat-msg-avatar ai-avatar">AI</div>
+      <div class="chat-msg-bubble ai-bubble">
+        <div class="chat-msg-content">${formatAIResponse(content)}</div>
+        <div class="chat-msg-time">${now}</div>
+      </div>`;
+  } else if (role === 'clarification') {
+    msgDiv.innerHTML = `
+      <div class="chat-msg-avatar ai-avatar" style="background:var(--warning)">?</div>
+      <div class="chat-msg-bubble clarification-bubble">
+        <div class="chat-msg-label">Clarification Needed</div>
+        <div class="chat-msg-content">${formatAIResponse(content)}</div>
+        <div class="chat-msg-time">${now}</div>
+      </div>`;
+  } else if (role === 'system') {
+    msgDiv.innerHTML = `
+      <div class="chat-msg-bubble system-bubble">
+        <div class="chat-msg-content">${escapeHtml(content)}</div>
+      </div>`;
+  } else if (role === 'error') {
+    msgDiv.innerHTML = `
+      <div class="chat-msg-bubble error-bubble">
+        <div class="chat-msg-content">⚠ ${escapeHtml(content)}</div>
+      </div>`;
+  }
+
+  container.appendChild(msgDiv);
+  chatMessageCount++;
+  container.scrollTo({ top: container.scrollHeight, behavior: 'smooth' });
+}
+
+function formatAIResponse(text) {
+  if (!text) return '';
+  return escapeHtml(text)
+    .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+    .replace(/\n/g, '<br>');
+}
+
+function escapeHtml(text) {
+  const div = document.createElement('div');
+  div.textContent = text;
+  return div.innerHTML;
+}
+
+// ── Candidate Cards ───────────────────────────────────────────────────────
+function appendCandidateCards(candidates, molecule) {
+  const container = document.getElementById('chat-messages');
+  if (!container || !candidates.length) return;
+
+  const cardsDiv = document.createElement('div');
+  cardsDiv.className = 'chat-candidates-wrapper';
+
+  let cardsHtml = `<div class="chat-candidates-header">
+    <span class="chat-candidates-icon">&#9883;</span>
+    <span>${candidates.length} candidate${candidates.length !== 1 ? 's' : ''} found for <strong>${molecule || 'analysis'}</strong></span>
+  </div><div class="chat-candidates-grid">`;
+
+  candidates.forEach((c, i) => {
+    const confClass = (c.confidence || '').toUpperCase();
+    const score = c.confidence_score || 0;
+    const scoreColor = score >= 70 ? 'var(--accent)' : score >= 50 ? 'var(--warning)' : 'var(--danger)';
+
+    cardsHtml += `
+    <div class="chat-candidate-card" id="chat-candidate-${i}">
+      <div class="cc-top-row">
+        <div class="cc-disease">${c.disease || 'Unknown'}</div>
+        <div class="cc-score" style="color:${scoreColor}">${score}%</div>
+      </div>
+      <div class="cc-desc">${(c.description || '').slice(0, 120)}${(c.description || '').length > 120 ? '...' : ''}</div>
+      ${c.biological_rationale ? `<div class="cc-rationale"><span class="cc-rationale-label">Bio rationale:</span> ${c.biological_rationale.slice(0, 100)}...</div>` : ''}
+      <div class="cc-meta">
+        <span class="cc-badge cc-conf-${confClass}">${confClass}</span>
+        <span class="cc-badge cc-patent">${c.patent_status || 'Unknown'}</span>
+        ${c.trial_id ? `<a class="cc-badge cc-trial" href="https://clinicaltrials.gov/study/${c.trial_id}" target="_blank">${c.trial_id}</a>` : ''}
+      </div>
+      <div class="cc-actions">
+        <button class="cc-reject-btn" onclick="rejectCandidateFromChat('${(c.disease || '').replace(/'/g, "\\'")}', ${i})">✕ Reject</button>
+        <button class="cc-analyze-btn" onclick="sendChatSuggestion('Tell me more about the ${(c.disease || '').replace(/'/g, "\\'")} indication')">Explore →</button>
+      </div>
+    </div>`;
+  });
+
+  cardsHtml += '</div>';
+  cardsDiv.innerHTML = cardsHtml;
+  container.appendChild(cardsDiv);
+  container.scrollTo({ top: container.scrollHeight, behavior: 'smooth' });
+}
+
+// ── Reject Candidate ──────────────────────────────────────────────────────
+async function rejectCandidateFromChat(diseaseName, cardIndex) {
+  if (!chatSessionId) return;
+
+  // Visual feedback
+  const card = document.getElementById(`chat-candidate-${cardIndex}`);
+  if (card) {
+    card.style.opacity = '0.3';
+    card.style.pointerEvents = 'none';
+    card.querySelector('.cc-reject-btn').textContent = 'Rejected';
+  }
+
+  try {
+    const res = await fetch('/reject-candidate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        session_id: chatSessionId,
+        drug_name: diseaseName,
+        reason: 'Rejected by user in chat'
+      })
+    });
+    const data = await res.json();
+    if (data.rejected_candidates) {
+      renderRejectedList(data.rejected_candidates);
+    }
+    appendChatMessage('system', `Rejected "${diseaseName}". It will be excluded from future results.`);
+  } catch (e) {
+    appendChatMessage('error', 'Failed to reject candidate: ' + e.message);
+  }
+}
+
+// ── Constraint Pills ──────────────────────────────────────────────────────
+function renderConstraintPills(constraintKeys) {
+  const container = document.getElementById('constraints-pills');
+  const empty = document.getElementById('constraint-empty');
+  if (!container) return;
+
+  container.innerHTML = '';
+
+  if (!constraintKeys || constraintKeys.length === 0) {
+    container.innerHTML = '<span class="constraint-empty">No active constraints — start a conversation to add filters</span>';
+    return;
+  }
+
+  constraintKeys.forEach(key => {
+    const label = key.replace(/_/g, ' ').replace(/^(exclude|require|prefer|prioritize)\s/, '');
+    const pill = document.createElement('span');
+    pill.className = 'constraint-pill';
+    pill.innerHTML = `${label} <button class="constraint-remove" onclick="removeChatConstraint('${key}')">&times;</button>`;
+    container.appendChild(pill);
+  });
+}
+
+async function removeChatConstraint(key) {
+  if (!chatSessionId) return;
+
+  try {
+    const res = await fetch('/remove-constraint', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ session_id: chatSessionId, constraint_key: key })
+    });
+    const data = await res.json();
+    renderConstraintPills(data.active_constraints || []);
+    appendChatMessage('system', `Removed constraint: ${key.replace(/_/g, ' ')}`);
+    if (data.remaining_candidates) {
+      appendCandidateCards(data.remaining_candidates, chatMolecule);
+    }
+  } catch (e) {
+    appendChatMessage('error', 'Failed to remove constraint: ' + e.message);
+  }
+}
+
+// ── Agent Activity Feed ───────────────────────────────────────────────────
+function updateAgentFeed(agentStatus) {
+  if (!agentStatus) return;
+
+  const statusLabels = {
+    idle: 'Idle',
+    searching: 'Searching...',
+    complete: 'Complete ✓',
+    synthesizing: 'Synthesizing...',
+    error: 'Error'
+  };
+
+  const agents = ['clinical', 'patents', 'market', 'regulatory', 'pubmed', 'mechanism', 'synthesizer'];
+  agents.forEach(agent => {
+    const item = document.getElementById(`feed-${agent}`);
+    if (!item) return;
+    const status = agentStatus[agent] || 'idle';
+    const dot = item.querySelector('.agent-feed-dot');
+    const statusEl = item.querySelector('.agent-feed-status');
+
+    if (dot) {
+      dot.className = `agent-feed-dot ${status}`;
+    }
+    if (statusEl) {
+      statusEl.textContent = statusLabels[status] || status;
+    }
+  });
+}
+
+function startAgentPolling() {
+  stopAgentPolling();
+  if (!chatSessionId) return;
+
+  chatPollingInterval = setInterval(async () => {
+    try {
+      const res = await fetch(`/session/${chatSessionId}`);
+      if (!res.ok) { stopAgentPolling(); return; }
+      const data = await res.json();
+      updateAgentFeed(data.agent_status || {});
+
+      if (!data.pipeline_running) {
+        stopAgentPolling();
+      }
+    } catch (e) {
+      stopAgentPolling();
+    }
+  }, 1500);
+}
+
+function stopAgentPolling() {
+  if (chatPollingInterval) {
+    clearInterval(chatPollingInterval);
+    chatPollingInterval = null;
+  }
+}
+
+// ── Rejected List ─────────────────────────────────────────────────────────
+function renderRejectedList(rejected) {
+  const container = document.getElementById('rejected-list');
+  if (!container) return;
+
+  if (!rejected || rejected.length === 0) {
+    container.innerHTML = '<div class="rejected-empty">No rejected candidates yet</div>';
+    return;
+  }
+
+  container.innerHTML = rejected.map(r =>
+    `<div class="rejected-item">
+      <span class="rejected-name">${r.drug || r}</span>
+      ${r.reason ? `<span class="rejected-reason">${r.reason}</span>` : ''}
+    </div>`
+  ).join('');
+}
+
+// ── Session Display ───────────────────────────────────────────────────────
+function updateSessionDisplay() {
+  const sidEl = document.getElementById('session-id-display');
+  const molEl = document.getElementById('session-mol-display');
+  const msgEl = document.getElementById('session-msg-count');
+
+  if (sidEl) sidEl.textContent = chatSessionId ? chatSessionId.slice(0, 8) + '...' : '—';
+  if (molEl) molEl.textContent = chatMolecule || '—';
+  if (msgEl) msgEl.textContent = chatMessageCount;
+}
+
+// ── Loading State ─────────────────────────────────────────────────────────
+function setChatLoading(loading) {
+  const btn = document.getElementById('chat-send-btn');
+  const input = document.getElementById('chat-input');
+  if (btn) {
+    btn.disabled = loading;
+    btn.innerHTML = loading
+      ? '<span class="chat-loading-spinner"></span>'
+      : '<span>&#10148;</span>';
+  }
+  if (input) input.disabled = loading;
+
+  if (loading) {
+    const container = document.getElementById('chat-messages');
+    if (container) {
+      let typing = container.querySelector('.chat-typing-indicator');
+      if (!typing) {
+        typing = document.createElement('div');
+        typing.className = 'chat-typing-indicator';
+        typing.innerHTML = `
+          <div class="chat-msg-avatar ai-avatar">AI</div>
+          <div class="typing-dots">
+            <span></span><span></span><span></span>
+          </div>`;
+        container.appendChild(typing);
+        container.scrollTo({ top: container.scrollHeight, behavior: 'smooth' });
+      }
+    }
+  } else {
+    const typing = document.querySelector('.chat-typing-indicator');
+    if (typing) typing.remove();
+  }
+}
+
+// ── Sidebar Toggle ────────────────────────────────────────────────────────
+function toggleChatSidebar() {
+  const sidebar = document.getElementById('chat-sidebar');
+  if (sidebar) sidebar.classList.toggle('collapsed');
+}
+
+// ── Chat Input Enter Key ──────────────────────────────────────────────────
+document.addEventListener('DOMContentLoaded', () => {
+  const chatInput = document.getElementById('chat-input');
+  if (chatInput) {
+    chatInput.addEventListener('keydown', e => {
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        sendChatMessage();
+      }
+    });
+  }
+});

@@ -1,0 +1,9 @@
+Status Code: 200
+Response: {
+  "molecule1": {
+    "clinical": {
+      "source": "ClinicalTrials.gov",
+      "source_url": "https://clinicaltrials.gov/search?intr=Aspirin",
+      "status": "success",
+      "total_found": 0,
+    

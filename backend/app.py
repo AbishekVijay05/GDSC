@@ -119,6 +119,8 @@ def compare():
         winner = m1 if s1 >= s2 else m2
         return jsonify({"molecule1": r1, "molecule2": r2, "winner": winner})
     except Exception as e:
+        import traceback
+        traceback.print_exc()
         return jsonify({"error": str(e)}), 500
 
 

@@ -73,69 +73,96 @@ Drug-likeness (Lipinski): {mechanism.get('drug_likeness', {}).get('assessment', 
 """
 
     prompt = f"""You are an expert pharmaceutical researcher specializing in drug repurposing.
-Analyze the following data about {molecule} and generate a JSON report.
+Analyze the following multi-domain data about the molecule: {molecule}
 
 {lang_instruction}
 
 {constraint_str}
---- CLINICAL TRIALS ---
-Total: {clinical.get('total_found', 0)}
-Samples: {_compact(clinical.get('trials', [])[:3])}
+--- CLINICAL TRIALS DATA ---
+Total trials found: {clinical.get('total_found', 0) or len(clinical.get('trials', []))}
+Trials: {json.dumps(clinical.get('trials', [])[:5], indent=2)}
 
---- PATENTS ---
-Total: {patents.get('total_patents', 0)}
-{_compact(patents.get('patents', [])[:2])}
+--- PATENT DATA ---
+Total patents: {patents.get('total_patents', 0)}
+Sample patents: {json.dumps(patents.get('patents', [])[:3], indent=2)}
 
---- MARKET ---
-Products: {market.get('products_found', 0)}
-Adverse events: {market.get('adverse_event_reports', 0):,}
-Insight: {market.get('market_insight', '')}
+--- MARKET DATA ---
+Products found: {market.get('products_found', 0)}
+Adverse event reports: {market.get('adverse_event_reports', 0):,}
+Market insight: {market.get('market_insight', '')}
 
---- REGULATORY ---
-Indications: {json.dumps(regulatory.get('current_indications', [])[:2], ensure_ascii=False)}
-Warnings: {json.dumps(regulatory.get('warnings', [])[:1], ensure_ascii=False)}
+--- REGULATORY DATA ---
+Current indications: {json.dumps(regulatory.get('current_indications', [])[:2], indent=2)}
+Warnings: {json.dumps(regulatory.get('warnings', [])[:2], indent=2)}
+Contraindications: {json.dumps(regulatory.get('contraindications', [])[:2], indent=2)}
 
 {mech_context}
+
 --- CROSS-DOMAIN CONTEXT ---
 {_truncate(cross_domain_context, 800)}
 
-Generate a comprehensive repurposing analysis. Respond ONLY with valid JSON:
+Generate a comprehensive drug repurposing analysis. Respond ONLY with valid JSON — no markdown fences, no extra text, just the JSON object.
 
 {{
-  "executive_summary": "2-3 sentences",
-  "biological_possibility_statement": "3-5 sentences on WHY this compound could work for a new indication. Reference specific targets/mechanism.",
+  "executive_summary": "2-3 sentences summarising repurposing potential",
+  "biological_possibility_statement": "3-5 sentences explaining WHY this compound COULD biologically work for a new indication. Reference the molecular formula, mechanism of action, and biological targets. Be specific.",
   "repurposing_opportunities": [
     {{
       "disease": "Specific disease name",
-      "description": "Why this drug could treat it",
-      "biological_rationale": "Specific biological/chemical reason with targets/pathways",
+      "description": "Why this drug could treat this disease",
+      "biological_rationale": "Specific biological/chemical reason — mention targets, pathways, molecular mechanism",
       "confidence": "HIGH or MODERATE or INVESTIGATE",
       "confidence_score": 82,
       "trial_id": "NCT number or null",
-      "trial_phase": "Phase 1 or Phase 2 or null",
+      "trial_phase": "Phase 1 or Phase 2 or Phase 3 or Phase 4 or null",
       "market_gap": "Unmet need or commercial opportunity",
       "patent_status": "Free to use or Patent protected or Expired or Unknown",
-      "why_not_pursued_yet": "Real reason not developed yet",
+      "why_not_pursued_yet": "Honest reason this has not been developed yet",
       "source": "ClinicalTrials.gov or PubMed or OpenFDA"
     }}
   ],
-  "why_not_pursued_analysis": "Honest explanation of barriers",
+  "why_not_pursued_analysis": "Honest paragraph explaining real barriers — patent walls, failed trials, safety concerns, ROI issues, or undiscovered opportunity",
   "negative_cases": [
     {{
-      "disease": "Disease this won't work for",
-      "reason": "Specific reason",
-      "evidence": "Data point"
+      "disease": "Disease this drug will NOT work for",
+      "reason": "Specific biological or clinical reason",
+      "evidence": "Data point supporting this"
     }}
   ],
-  "unmet_needs": {{"finding": "Specific need", "evidence": "Data point", "source": "ClinicalTrials.gov or OpenFDA"}},
-  "pipeline_status": {{"finding": "Pipeline status", "evidence": "Trial numbers", "source": "ClinicalTrials.gov"}},
-  "patent_landscape": {{"finding": "Patent situation", "evidence": "Based on {patents.get('total_patents', 0)} patents", "source": "PubChem"}},
-  "market_potential": {{"finding": "Commercial opportunity", "evidence": "Based on {market.get('adverse_event_reports', 0):,} adverse events", "source": "OpenFDA"}},
-  "strategic_recommendation": {{"verdict": "PURSUE or INVESTIGATE FURTHER or LOW PRIORITY", "reasoning": "Why", "next_steps": ["Step 1", "Step 2", "Step 3"]}},
-  "evidence_card": {{"molecular_logic": "Structural reason", "genetic_pathway": "Shared pathway", "side_effect_proxy": "Side effect hint", "reasoning_path": ["Data 1", "Data 2", "Data 3"]}},
+  "unmet_needs": {{
+    "finding": "Specific unmet medical need",
+    "evidence": "Cite trial IDs or data points",
+    "source": "ClinicalTrials.gov or OpenFDA"
+  }},
+  "pipeline_status": {{
+    "finding": "Current clinical pipeline status",
+    "evidence": "Specific trial numbers and phases",
+    "source": "ClinicalTrials.gov"
+  }},
+  "patent_landscape": {{
+    "finding": "Patent situation and freedom to operate",
+    "evidence": "Based on {patents.get('total_patents', 0)} patents found",
+    "source": "PubChem"
+  }},
+  "market_potential": {{
+    "finding": "Commercial opportunity assessment",
+    "evidence": "Based on {market.get('adverse_event_reports', 0):,} adverse event reports",
+    "source": "OpenFDA"
+  }},
+  "strategic_recommendation": {{
+    "verdict": "PURSUE or INVESTIGATE FURTHER or LOW PRIORITY",
+    "reasoning": "Specific reasoning combining all domains including biology",
+    "next_steps": ["Step 1", "Step 2", "Step 3"]
+  }},
+  "evidence_card": {{
+    "molecular_logic": "Explain the structural reason, e.g. similar to X drug",
+    "genetic_pathway": "Explain the shared genetic pathway overlap",
+    "side_effect_proxy": "Explain if side effects provide a hint for new use",
+    "reasoning_path": ["Data point 1: X source shows Y", "Data point 2: Z biological target match", "Data point 3: Clinical signal in W population"]
+  }},
   "confidence_score": 70,
   "key_risks": ["Risk 1", "Risk 2"],
-  "cross_domain_insight": "One insight only visible when combining all data sources",
+  "cross_domain_insight": "The one insight only visible when combining all 5 data sources",
   "language": "{language}"
 }}"""
 

@@ -1324,7 +1324,7 @@ async function startComparison() {
   
   const resDiv = document.getElementById('compare-results');
   resDiv.classList.remove('hidden');
-  resDiv.innerHTML = '<div style="color:var(--accent)">Synthesizing dual-candidate vectors...</div>';
+  resDiv.innerHTML = '<div style="color:var(--accent); text-align:center; padding: 40px;"><div class="synthesis-pulse" style="margin: 0 auto 16px;"></div>Verifying biological vectors & data overlap...</div>';
   
   try {
     const res = await fetch('/compare', {
@@ -1332,26 +1332,80 @@ async function startComparison() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ molecule1: mol1, molecule2: mol2, language: getLanguage() })
     });
-    if(!res.ok) throw new Error('API Fault');
     const data = await res.json();
+    if(!res.ok) {
+      throw new Error(data.error || 'API Fault');
+    }
     
-    resDiv.innerHTML = `
-      <div style="display:flex; gap:20px; margin-top:20px;">
-        <div style="flex:1; background:var(--bg3); padding:20px; border-radius:16px; border:1px solid ${data.winner===mol1?'var(--accent)':'var(--border)'}">
-          <h3 style="color:var(--accent);">${data.molecule1.molecule}</h3>
-          <p style="color:var(--text2); font-size:14px">Confidence: ${data.molecule1.confidence?.total||0}%</p>
+    const r1 = data.molecule1.report || {};
+    const r2 = data.molecule2.report || {};
+    const c1 = data.molecule1.confidence || {};
+    const c2 = data.molecule2.confidence || {};
+
+    let html = `
+      <div class="head-to-head-container">
+        <h2 style="text-align:center; font-family:var(--font-serif); font-size:24px; margin-bottom:32px; color:var(--text)">Head-to-Head Multi-Domain Analysis</h2>
+        
+        <table class="compare-table">
+          <thead>
+            <tr>
+              <th style="width: 25%">Domain Parameter</th>
+              <th style="width: 37.5%; border:1px solid ${data.winner===mol1?'var(--accent)':'transparent'}; background:${data.winner===mol1?'rgba(0,255,102,0.05)':'transparent'}">${mol1} ${data.winner===mol1?'<span class="winner-tag">Winner</span>':''}</th>
+              <th style="width: 37.5%; border:1px solid ${data.winner===mol2?'var(--accent)':'transparent'}; background:${data.winner===mol2?'rgba(0,255,102,0.05)':'transparent'}">${mol2} ${data.winner===mol2?'<span class="winner-tag">Winner</span>':''}</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Confidence Score</td>
+              <td class="bold-val">${c1.total||0}%</td>
+              <td class="bold-val">${c2.total||0}%</td>
+            </tr>
+            <tr>
+              <td>Biological Possibility</td>
+              <td class="text-val">${r1.biological_possibility_statement || 'N/A'}</td>
+              <td class="text-val">${r2.biological_possibility_statement || 'N/A'}</td>
+            </tr>
+            <tr>
+              <td>Market Potential</td>
+              <td class="text-val">${(r1.market_potential||{}).finding || 'N/A'}</td>
+              <td class="text-val">${(r2.market_potential||{}).finding || 'N/A'}</td>
+            </tr>
+            <tr>
+              <td>Patent Landscape</td>
+              <td class="text-val">${(r1.patent_landscape||{}).finding || 'N/A'}</td>
+              <td class="text-val">${(r2.patent_landscape||{}).finding || 'N/A'}</td>
+            </tr>
+            <tr>
+              <td>Pipeline Status</td>
+              <td class="text-val">${(r1.pipeline_status||{}).finding || 'N/A'}</td>
+              <td class="text-val">${(r2.pipeline_status||{}).finding || 'N/A'}</td>
+            </tr>
+            <tr>
+              <td>Strategic Verdict</td>
+              <td class="verdict-val">${(r1.strategic_recommendation||{}).verdict || 'N/A'}</td>
+              <td class="verdict-val">${(r2.strategic_recommendation||{}).verdict || 'N/A'}</td>
+            </tr>
+          </tbody>
+        </table>
+        
+        <div class="compare-verdict-banner">
+          <div style="font-family:var(--font-mono); font-size:11px; text-transform:uppercase; color:var(--text-dim); margin-bottom:8px">Clinical Recommendation</div>
+          <div style="font-size:20px; font-weight:600; color:var(--accent)">
+            Superior Candidate: ${data.winner}
+          </div>
+          <p style="color:var(--text-dim); margin-top:12px; font-size:14px; max-width:600px; margin-left:auto; margin-right:auto">
+            ${data.winner === mol1 ? r1.executive_summary : r2.executive_summary}
+          </p>
         </div>
-        <div style="flex:1; background:var(--bg3); padding:20px; border-radius:16px; border:1px solid ${data.winner===mol2?'var(--accent)':'var(--border)'}">
-          <h3 style="color:var(--accent2);">${data.molecule2.molecule}</h3>
-          <p style="color:var(--text2); font-size:14px">Confidence: ${data.molecule2.confidence?.total||0}%</p>
-        </div>
-      </div>
-      <div style="margin-top:20px; text-align:center; font-family:var(--font-mono); color:var(--text)">
-        WINNING CANDIDATE: <span style="color:var(--accent)">${data.winner}</span>
       </div>
     `;
+    resDiv.innerHTML = html;
+    
+    // Auto-scroll to results
+    resDiv.scrollIntoView({ behavior: 'smooth', block: 'start' });
   } catch(e) {
-    resDiv.innerHTML = `<div style="color:var(--danger)">Comparison failed.</div>`;
+    console.error('Comparison error:', e);
+    resDiv.innerHTML = `<div style="color:var(--danger)">Comparison failed. Error: ${e.message}</div>`;
   }
 }
 
@@ -1391,26 +1445,47 @@ function startHypothesis() {
 function downloadPDF() {
   if (!currentData) return;
   const element = document.getElementById('results-section');
+  if (!element) return;
+
   const opt = {
     margin:       [10, 10],
     filename:     `RepurposeAI-${currentData.molecule}-Report.pdf`,
     image:        { type: 'jpeg', quality: 0.98 },
-    html2canvas:  { scale: 2, useCORS: true, logging: false },
-    jsPDF:        { unit: 'mm', format: 'a4', orientation: 'portrait' }
+    html2canvas:  { 
+      scale: 1.5, 
+      useCORS: true, 
+      scrollX: 0, 
+      scrollY: 0,
+      windowWidth: element.scrollWidth,
+      windowHeight: element.scrollHeight,
+      // Disable problematic filters during capture
+      onclone: (clonedDoc) => {
+        const sect = clonedDoc.getElementById('results-section');
+        if (sect) {
+          sect.classList.remove('hidden');
+          // Neutralize backdrop filters and glass effects for html2canvas
+          sect.style.backdropFilter = 'none';
+          sect.style.webkitBackdropFilter = 'none';
+          sect.style.background = '#030508'; // Use solid background for capture
+          sect.style.height = 'auto';
+          sect.style.paddingTop = '20px';
+          
+          // Fix icons/glyphs that might be missing
+          const icons = sect.querySelectorAll('.results-back, .export-btn');
+          icons.forEach(el => el.style.display = 'none'); // Hide navigation buttons in PDF
+        }
+      }
+    },
+    jsPDF:        { unit: 'mm', format: 'a4', orientation: 'portrait' },
+    pagebreak:    { mode: ['avoid-all', 'css', 'legacy'] }
   };
   
-  showToast('Generating PDF...', 'info');
-  html2pdf().set(opt).from(element).output('blob').then(function(blob) {
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = opt.filename;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
+  showToast('Generating high-quality report...', 'info');
+  
+  // Use the native .save() method for better reliability
+  html2pdf().set(opt).from(element).save().then(() => {
     showToast('PDF downloaded successfully');
-  }).catch(function(err) {
+  }).catch(err => {
     console.error('PDF generation error:', err);
     showToast('PDF generation failed', 'error');
   });

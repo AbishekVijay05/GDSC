@@ -8,6 +8,7 @@ This is what separates hypothesis generation from aggregation.
 import aiohttp
 import json
 import os
+from .token_tracker import record_usage
 from .overlap_engine import find_disease_pathways, compute_overlap, extract_drug_pathways, DISEASE_PATHWAYS
 from .similarity_engine import DRUG_CLASSES
 
@@ -133,6 +134,8 @@ Be specific about the biological mechanism. Use phrases like "pathway overlap su
             async with session.post(OPENROUTER_API_URL,headers=headers,json=payload,timeout=aiohttp.ClientTimeout(total=30)) as resp:
                 if resp.status==200:
                     data = await resp.json()
+                    usage = data.get("usage", {})
+                    record_usage("hypothesis_generator", usage.get("total_tokens", 300))
                     result["ai_narrative"] = data["choices"][0]["message"]["content"].strip()
     except Exception as e:
         result["ai_narrative"] = f"Pathway overlap analysis identified {len(hypotheses)} candidates for {disease}."

@@ -4,6 +4,7 @@ import aiohttp, json, os
 NVIDIA_API_URL = "https://integrate.api.nvidia.com/v1/chat/completions"
 # Use 8B model — faster and usually sufficient
 NVIDIA_MODEL   = "meta/llama-3.1-8b-instruct"
+from .token_tracker import record_usage
 
 # Cache synthesis results so we never repeat an expensive call
 _synthesis_cache = {}
@@ -33,6 +34,7 @@ async def synthesize_report(molecule, clinical, patents, market, regulatory,
                              rejected_candidates=None) -> dict:
 
     if FAST_MODE:
+        record_usage("synthesizer", 150)  # estimated tokens for heuristic report
         return _fast_report(molecule, clinical, patents, market, regulatory, mechanism, language, constraints, rejected_candidates)
 
     api_key = os.environ.get("NVIDIA_API_KEY", "")
@@ -184,6 +186,8 @@ Generate a comprehensive drug repurposing analysis. Respond ONLY with valid JSON
             ) as resp:
                 if resp.status == 200:
                     data = await resp.json()
+                    usage = data.get("usage", {})
+                    record_usage("synthesizer", usage.get("total_tokens", 1500))
                     text = data["choices"][0]["message"]["content"].strip()
                     # Strip markdown code fences if present
                     if "```" in text:
@@ -373,11 +377,11 @@ def _build_opps(molecule, trials, conditions, patent_total, trial_count, phases)
 
         # Score based on trial quantity + quality
         cond_score = 0
-        if count >= 5:
+        if count >= 3:
             cond_score = 85
-        elif count >= 3:
-            cond_score = 70
         elif count >= 2:
+            cond_score = 70
+        elif count >= 1:
             cond_score = 55
         elif count == 1:
             cond_score = 40

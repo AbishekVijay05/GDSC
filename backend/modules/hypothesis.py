@@ -6,6 +6,7 @@ This is the "Find Hidden Opportunities" mode judges remember.
 import aiohttp
 import json
 import os
+from .token_tracker import record_usage
 
 OPENROUTER_API_URL = "https://openrouter.ai/api/v1/chat/completions"
 
@@ -116,6 +117,8 @@ Be specific and scientific. Return only the hypothesis text, no JSON."""
                                     timeout=aiohttp.ClientTimeout(total=20)) as resp:
                 if resp.status == 200:
                     data = await resp.json()
+                    usage = data.get("usage", {})
+                    record_usage("hypothesis", usage.get("total_tokens", 300))
                     return data["choices"][0]["message"]["content"].strip()
     except Exception as e:
         print(f"[Hypothesis] {e}")

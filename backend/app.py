@@ -15,6 +15,9 @@ except Exception:
 
 NVIDIA_API_KEY = os.environ.get("NVIDIA_API_KEY", "nvapi-your-key-here")
 os.environ["NVIDIA_API_KEY"] = NVIDIA_API_KEY
+TWO_FACTOR_API_KEY = "ca0d510f-9aa0-11f0-b922-0200cd936042"
+
+import requests
 
 from modules.clinical        import fetch_clinical_trials
 from modules.patents         import fetch_patents
@@ -36,6 +39,11 @@ from modules.conversation_state import (
     set_pipeline_running, get_session_summary, cleanup_expired
 )
 from modules.intent_translator import translate_intent, _fallback_parse
+from modules.database import init_db, get_db_connection
+from modules.token_tracker import get_usage_summary
+
+# Initialize the database schema
+init_db()
 
 # ── Common herbal/Ayurvedic name → canonical compound mapping ──────────
 HERB_NAME_MAP = {
@@ -88,6 +96,9 @@ app = Flask(__name__,
     template_folder=os.path.join(os.path.dirname(__file__), "../frontend/templates"),
     static_folder=os.path.join(os.path.dirname(__file__), "../frontend/static"))
 CORS(app)
+app.secret_key = "repurpose_ai_secure_token_secret" # Required for sessions
+
+from flask import session, redirect, url_for
 
 SUPPORTED_LANGUAGES = {
     "en": "English", "ta": "Tamil",  "hi": "Hindi",    "te": "Telugu",
@@ -98,7 +109,116 @@ SUPPORTED_LANGUAGES = {
 
 @app.route("/")
 def index():
+    if not session.get("user_id"):
+        return redirect(url_for("login"))
     return render_template("index.html")
+
+@app.route("/login", methods=["GET", "POST"])
+def login():
+    if request.method == "POST":
+        username = request.form.get("username")
+        password = request.form.get("password")
+        
+        db = get_db_connection()
+        user = db.execute("SELECT * FROM users WHERE username = ? AND password = ?", 
+                          (username, password)).fetchone()
+        db.close()
+        
+        if user:
+            session["user_id"] = user["id"]
+            session["username"] = user["username"]
+            return redirect(url_for("index"))
+        return render_template("login.html", error="Invalid credentials")
+    return render_template("login.html")
+
+@app.route("/signup", methods=["GET", "POST"])
+def signup():
+    if request.method == "POST":
+        username = request.form.get("username")
+        password = request.form.get("password")
+        mobile = request.form.get("mobile")
+
+        if len(username) < 3:
+            return render_template("signup.html", error="Username must be at least 3 characters")
+        if len(password) < 4:
+            return render_template("signup.html", error="Password must be at least 4 characters")
+
+        db = get_db_connection()
+        try:
+            cursor = db.cursor()
+            cursor.execute("INSERT INTO users (username, password, mobile) VALUES (?, ?, ?)",
+                           (username, password, mobile or ""))
+            db.commit()
+            user_id = cursor.lastrowid
+            db.close()
+
+            session["user_id"] = user_id
+            session["username"] = username
+            return redirect(url_for("index"))
+        except sqlite3.IntegrityError:
+            db.close()
+            return render_template("signup.html", error="Username already exists. Please choose another.")
+
+    return render_template("signup.html")
+
+@app.route("/logout")
+def logout():
+    session.clear()
+    return redirect(url_for("login"))
+
+@app.route("/pricing")
+def pricing():
+    return render_template("pricing.html")
+
+@app.route("/api/token_usage")
+def token_usage():
+    return jsonify(get_usage_summary())
+
+# ── 2Factor OTP API Integration ─────────────────────────────
+@app.route("/api/send_otp", methods=["POST"])
+def send_otp():
+    mobile = request.json.get("mobile")
+    if not mobile:
+        return jsonify({"status": "Error", "message": "Mobile number is required"}), 400
+    
+    # 2Factor.in API URL for Voice OTP
+    # For voice: https://2factor.in/API/V1/{api_key}/VOICE/{phone_number}/{otp_code}
+    # To use their auto-gen OTP: https://2factor.in/API/V1/{api_key}/SMS/+91{mobile}/AUTOGEN/VOICE
+    url = f"https://2factor.in/API/V1/{TWO_FACTOR_API_KEY}/SMS/{mobile}/AUTOGEN/VOICE"
+    
+    try:
+        response = requests.get(url)
+        data = response.json()
+        if data.get("Status") == "Success":
+            # Store SessionName (request id) to verify later
+            session["otp_session_id"] = data.get("Details")
+            return jsonify({"status": "Success", "message": "Voice OTP call initiated"})
+        else:
+            return jsonify({"status": "Error", "message": data.get("Details")}), 400
+    except Exception as e:
+        return jsonify({"status": "Error", "message": str(e)}), 500
+
+@app.route("/api/verify_otp", methods=["POST"])
+def verify_otp():
+    otp = request.json.get("otp")
+    session_id = session.get("otp_session_id")
+    
+    if not otp or not session_id:
+        return jsonify({"status": "Error", "message": "OTP or Session missing"}), 400
+    
+    # Verify URL: https://2factor.in/API/V1/{api_key}/SMS/VERIFY/{session_id}/{otp_input}
+    url = f"https://2factor.in/API/V1/{TWO_FACTOR_API_KEY}/SMS/VERIFY/{session_id}/{otp}"
+    
+    try:
+        response = requests.get(url)
+        data = response.json()
+        if data.get("Status") == "Success" and data.get("Details") == "OTP Matched":
+            session["otp_verified"] = True
+            return jsonify({"status": "Success", "message": "OTP Verified"})
+        else:
+            return jsonify({"status": "Error", "message": "Invalid OTP"}), 400
+    except Exception as e:
+        return jsonify({"status": "Error", "message": str(e)}), 500
 
 
 @app.route("/health")
@@ -378,7 +498,7 @@ def chat():
 
         else:  # general_question or clarification
             # Use the existing followup system
-            context = session.get("last_result", {})
+            context = session.get("last_result") or {}
             loop = asyncio.new_event_loop()
             asyncio.set_event_loop(loop)
             try:

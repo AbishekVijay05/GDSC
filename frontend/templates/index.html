@@ -22,9 +22,12 @@
     <button class="tab-btn" onclick="switchTab('chat')">Chat</button>
     <button class="tab-btn" onclick="switchTab('test')">Test</button>
     <button class="tab-btn" onclick="switchTab('about')">About</button>
-    <button class="tab-btn" onclick="switchTab('help')">Help</button>
+    <button class="tab-btn" onclick="switchTab('database')">Drug Library</button>
+    <a href="/pricing" class="tab-btn" target="_blank" style="text-decoration: none; color: inherit; display: inline-flex; align-items: center;">Pricing</a>
+    <a href="/logout" class="tab-btn" style="text-decoration: none; color: inherit; display: inline-flex; align-items: center;">Sign Out</a>
   </div>
   <div class="nav-right">
+    <button class="theme-btn" onclick="openTokenModal()" title="View Token Limits" style="font-size: 16px;">&#x26A1;</button>
     <button class="theme-btn" onclick="toggleTheme()" title="Toggle theme">&#9788;</button>
     <div class="nav-tag">QUANTUM-BIO 3.0</div>
   </div>
@@ -357,33 +360,121 @@
   </section>
 </div>
 
-<!-- NEW TAB: HELP -->
-<div id="help-panel" class="tab-panel">
-  <section class="compare-section" style="justify-content: flex-start;">
-    <div class="content-width">
-      <div class="report-badge">Documentation</div>
-      <h2 class="compare-title">Guidance & Support</h2>
-      <p class="compare-sub">How to get the most out of the drug discovery platform.</p>
-      
-      <div class="glass-card" style="margin-top:40px">
-        <ul style="list-style:none; text-align: left">
-          <li style="margin-bottom:24px; padding-bottom:24px; border-bottom:1px solid var(--border)">
-            <h4 style="color:var(--accent2); margin-bottom:8px">1. Starting a Deep Dive</h4>
-            <p style="font-size:14px; color:var(--text-dim)">Go to the <b>Repurpose</b> tab, enter a molecule name, and wait for the 6 agents to finish their retrieval. The AI will then synthesize a full hypothesis.</p>
-          </li>
-          <li style="margin-bottom:24px; padding-bottom:24px; border-bottom:1px solid var(--border)">
-            <h4 style="color:var(--accent2); margin-bottom:8px">2. Understanding Confidence</h4>
-            <p style="font-size:14px; color:var(--text-dim)">The Confidence Score (0-100%) reflects the richness of data found across all domains. Higher scores indicate stronger clinical and patent evidence.</p>
-          </li>
-          <li>
-            <h4 style="color:var(--accent2); margin-bottom:8px">3. Knowledge Test</h4>
-            <p style="font-size:14px; color:var(--text-dim)">Use the <b>Test</b> tab to challenge your clinical intuition against our AI results. This is recommended for students to improve their pharmacology logic.</p>
-          </li>
-        </ul>
+<!-- NEW TAB: DRUG LIBRARY -->
+<div id="database-panel" class="tab-panel">
+  <div class="content-width" style="padding: 100px 24px 60px;">
+    <div class="dl-top-bar">
+      <div class="dl-top-bar-left">
+        <span>&#10003;</span> EXPERIMENTAL PIPELINE
       </div>
+      <div class="dl-top-bar-right">26 DRUGS</div>
     </div>
-  </section>
+    
+    <h3 style="color: #F8FAFC; margin-bottom: 24px; font-family: 'DM Serif Display', serif; font-size: 28px;">FDA Approved Innovations</h3>
+    <div id="fda-approved-grid" class="dl-grid" style="margin-bottom: 60px;"></div>
+
+    <h3 style="color: #F8FAFC; margin-bottom: 24px; font-family: 'DM Serif Display', serif; font-size: 28px;">Investigational Candidates</h3>
+    <div id="non-fda-grid" class="dl-grid"></div>
+  </div>
+
+  <style>
+    .dl-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 24px; }
+    .dl-card { background: #0A0D0B; border: 1px solid rgba(0,255,136,0.1); border-radius: 16px; padding: 28px; transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); display: flex; flex-direction: column; }
+    .dl-card:hover { transform: translateY(-4px); box-shadow: 0 12px 40px rgba(0,255,136,0.08); border-color: rgba(0,255,136,0.3); }
+    .dl-header { display: flex; justify-content: space-between; align-items: flex-start; }
+    .dl-name { font-family: var(--font-serif); font-size: 26px; color: #F8FAFC; margin: 0 0 6px 0; line-height: 1.2; letter-spacing: -0.5px; }
+    .dl-brand { font-family: 'Inter', sans-serif; font-size: 13px; color: #64748B; margin: 0 0 28px 0; }
+    .dl-year { font-family: 'Inter', sans-serif; font-size: 12px; font-weight: 600; color: #00FF88; background: rgba(0,255,136,0.05); border: 1px solid rgba(0,255,136,0.15); padding: 5px 14px; border-radius: 20px; }
+    .dl-indication { font-family: 'Inter', sans-serif; font-size: 15px; font-weight: 600; color: #F8FAFC; margin-bottom: 10px; display: flex; align-items: flex-start; gap: 10px; }
+    .dl-indication span { color: #64748B; font-size: 16px; }
+    .dl-mechanism { font-family: 'Inter', sans-serif; font-size: 13px; color: #64748B; margin: 0 0 24px 23px; line-height: 1.6; }
+    .dl-novelty { background: rgba(0,163,255,0.03); border: 1px solid rgba(0,163,255,0.15); border-radius: 10px; padding: 14px 18px; display: flex; gap: 12px; align-items: flex-start; margin-bottom: 24px; flex-grow: 1; }
+    .dl-novelty i { font-style: normal; margin-top: 1px; font-size: 14px; }
+    .dl-novelty p { font-family: 'Inter', sans-serif; font-size: 13px; color: #00A3FF; margin: 0; line-height: 1.5; }
+    .dl-status { font-family: 'Space Grotesk', sans-serif; font-size: 11px; font-weight: 600; color: #00FF88; letter-spacing: 1px; text-transform: uppercase; margin-bottom: 20px; display: flex; align-items: center; gap: 8px; }
+    .dl-action { display: block; width: 100%; padding: 14px 0; background: transparent; border: 1px solid rgba(255,255,255,0.05); border-radius: 8px; color: #64748B; font-family: 'Inter', sans-serif; font-size: 13px; cursor: pointer; transition: all 0.3s ease; }
+    .dl-action:hover { background: rgba(255,255,255,0.03); color: #F8FAFC; border-color: rgba(255,255,255,0.1); }
+    .dl-top-bar { display: flex; justify-content: space-between; align-items: center; background: rgba(0,255,136,0.03); border: 1px solid rgba(0,255,136,0.1); border-radius: 12px; padding: 16px 24px; margin-bottom: 40px; }
+    .dl-top-bar-left { color: #00FF88; font-family: 'Space Grotesk', sans-serif; font-size: 13px; font-weight: 700; letter-spacing: 1.5px; display: flex; align-items: center; gap: 10px; }
+    .dl-top-bar-right { color: #64748B; font-family: 'Inter', sans-serif; font-size: 12px; font-weight: 600; letter-spacing: 1.5px; border: 1px solid rgba(255,255,255,0.1); padding: 4px 14px; border-radius: 20px; background: rgba(255,255,255,0.02); text-transform: uppercase; }
+  </style>
+
+  <script>
+    const drugData = [
+      { name: "Lecanemab", brand: "Leqembi", approved: "2023", indication: "Alzheimer's disease", mechanism: "Monoclonal antibody targeting aggregated amyloid-beta.", novelty: "One of the first disease-modifying therapies to slow cognitive decline in Alzheimer's.", fda_approved: true, status: "FDA Approved (Phase 4)" },
+      { name: "Tirzepatide", brand: "Zepbound", approved: "2023", indication: "Obesity / Type 2 Diabetes", mechanism: "Dual GIP/GLP-1 receptor agonist.", novelty: "Dual incretin mechanism \u2014 superior weight loss vs single agonists.", fda_approved: true, status: "FDA Approved (Phase 4)" },
+      { name: "Donanemab", brand: "Kisunla", approved: "2024", indication: "Early Alzheimer's disease", mechanism: "Antibody targeting deposited amyloid plaques for clearance.", novelty: "Can be stopped after plaque clearance.", fda_approved: true, status: "FDA Approved (Phase 4)" },
+      { name: "Zuranolone", brand: "Zurzuvae", approved: "2023", indication: "Postpartum depression", mechanism: "GABA-A receptor positive allosteric modulator.", novelty: "First oral treatment for postpartum depression.", fda_approved: true, status: "FDA Approved (Phase 4)" },
+      { name: "Nirsevimab", brand: "Beyfortus", approved: "2023", indication: "RSV prevention in infants", mechanism: "Monoclonal antibody against RSV F protein.", novelty: "Single dose lasts entire RSV season.", fda_approved: true, status: "FDA Approved (Phase 4)" },
+      { name: "Imetelstat", brand: "Rytelo", approved: "2024", indication: "Myelodysplastic syndromes", mechanism: "Telomerase inhibitor.", novelty: "First telomerase inhibitor approved.", fda_approved: true, status: "FDA Approved (Phase 4)" },
+      { name: "Xanomeline-trospium", brand: "Cobenfy", approved: "2024", indication: "Schizophrenia", mechanism: "Dual M1/M4 muscarinic acetylcholine receptor agonist.", novelty: "First novel mechanism for schizophrenia in decades without dopamine blockade.", fda_approved: true, status: "FDA Approved" },
+      { name: "Resmetirom", brand: "Rezdiffra", approved: "2024", indication: "NASH (MASH)", mechanism: "Thyroid hormone receptor-beta selective agonist.", novelty: "First and only FDA-approved treatment for NASH (MASH).", fda_approved: true, status: "FDA Approved" },
+      { name: "Datopotamab", brand: "Dato-DXd", approved: "2025", indication: "Non-small cell lung cancer", mechanism: "TROP2-directed antibody-drug conjugate.", novelty: "Highly targeted payload delivery showing superior efficacy to standard chemotherapy.", fda_approved: false, status: "Pending Decision" },
+      { name: "Iptacopan", brand: "Fabhalta", approved: "2023", indication: "Paroxysmal nocturnal hemoglobinuria", mechanism: "Proximal complement factor B inhibitor.", novelty: "First oral monotherapy for adults with PNH, controlling RBC destruction.", fda_approved: true, status: "FDA Approved" },
+      { name: "Talquetamab", brand: "Talvey", approved: "2023", indication: "Multiple myeloma", mechanism: "GPRC5D-directed bispecific T-cell engager.", novelty: "Targets a novel antigen (GPRC5D) in multiple myeloma for difficult-to-treat patients.", fda_approved: true, status: "FDA Approved" },
+      { name: "Omaveloxolone", brand: "Skyclarys", approved: "2023", indication: "Friedreich's ataxia", mechanism: "Nrf2 pathway activator restoring mitochondrial function.", novelty: "The first and only approved treatment for Friedreich's ataxia.", fda_approved: true, status: "FDA Approved" },
+      { name: "Epcoritamab", brand: "Epkinly", approved: "2023", indication: "Diffuse large B-cell lymphoma", mechanism: "CD20xCD3 bispecific T-cell engaging antibody.", novelty: "Off-the-shelf subcutaneous bispecific antibody for third-line blood cancer.", fda_approved: true, status: "FDA Approved" },
+      { name: "Tulmiprofene", brand: "Investigational", approved: "2025", indication: "Advanced breast cancer", mechanism: "Dual action anti-estrogen and epigenetic modulator.", novelty: "Overcomes endocrine resistance in hormone-receptor positive mutations.", fda_approved: false, status: "Clinical Trial" },
+      { name: "Lovo-cel", brand: "Lyfgenia", approved: "2023", indication: "Sickle cell disease (SCD)", mechanism: "Lentiviral vector delivering modified beta-globin gene.", novelty: "Cell-based gene therapy adding functional hemoglobin to reduce vaso-occlusive events.", fda_approved: true, status: "FDA Approved" },
+      { name: "Palovarotene", brand: "Sohonos", approved: "2023", indication: "Fibrodysplasia ossificans progressiva", mechanism: "Retinoic acid receptor gamma (RAR\u03B3) agonist.", novelty: "First treatment for ultra-rare bone-growth disease.", fda_approved: true, status: "FDA Approved" },
+      { name: "Belantamab", brand: "Blenrep", approved: "2024", indication: "Relapsed multiple myeloma", mechanism: "Anti-BCMA antibody-drug conjugate.", novelty: "Repositioned in combo trials after earlier withdrawal.", fda_approved: false, status: "Pending Decision" },
+      { name: "Vamorolone", brand: "Agamree", approved: "2023", indication: "Duchenne muscular dystrophy", mechanism: "Novel dissociative corticosteroid.", novelty: "Retains efficacy of steroids with fewer limiting side effects.", fda_approved: true, status: "FDA Approved" },
+      { name: "Mirvetuximab", brand: "Elahere", approved: "2024", indication: "Ovarian cancer", mechanism: "Folate receptor alpha-directed antibody-drug conjugate.", novelty: "First ADC approved for platinum-resistant ovarian cancer.", fda_approved: true, status: "FDA Approved" },
+      { name: "Aficamten", brand: "Investigational", approved: "2025", indication: "Hypertrophic cardiomyopathy", mechanism: "Next-in-class cardiac myosin inhibitor.", novelty: "Significantly improves exercise capacity in obstructive HCM.", fda_approved: false, status: "Phase III Trial" },
+      { name: "Bempegaldesleukin", brand: "Investigational", approved: "2025", indication: "Solid tumors", mechanism: "CD122-preferential IL-2 pathway agonist.", novelty: "Stimulates anti-tumor immunity with prolonged half-life.", fda_approved: false, status: "Phase III Trial" },
+      { name: "Rozanolixizumab", brand: "Rystiggo", approved: "2023", indication: "Myasthenia gravis", mechanism: "Neonatal Fc receptor (FcRn) blocker.", novelty: "First FDA-approved treatment for both anti-AChR and anti-MuSK antibody-positive generalized MG.", fda_approved: true, status: "FDA Approved" },
+      { name: "Talazoparib", brand: "Talzenna", approved: "2023", indication: "HRR gene-mutated prostate cancer", mechanism: "Poly (ADP-ribose) polymerase inhibitor.", novelty: "Approved in combination with enzalutamide for difficult-to-treat mutations.", fda_approved: true, status: "FDA Approved" },
+      { name: "Pegcetacoplan", brand: "Syfovre", approved: "2023", indication: "Geographic Atrophy (Macular Degeneration)", mechanism: "Complement C3 inhibitor.", novelty: "First and only approved treatment for Geographic Atrophy.", fda_approved: true, status: "FDA Approved" },
+      { name: "Enzalutamide", brand: "Xtandi", approved: "2023", indication: "Non-metastatic prostate cancer", mechanism: "Androgen receptor inhibitor.", novelty: "Expanded approval for early-stage biochemically recurrent cases.", fda_approved: true, status: "FDA Approved" },
+      { name: "Pelabresib", brand: "Investigational", approved: "2025", indication: "Myelofibrosis", mechanism: "BET inhibitor.", novelty: "Potential disease-modifying therapy when combined with ruxolitinib.", fda_approved: false, status: "Pre-registration" }
+    ];
+
+    function renderDrugLibrary() {
+      const fdaGrid = document.getElementById('fda-approved-grid');
+      const nonFdaGrid = document.getElementById('non-fda-grid');
+      
+      drugData.forEach(d => {
+        const card = document.createElement('div');
+        card.className = 'dl-card';
+        card.innerHTML = `
+          <div class="dl-header">
+            <h3 class="dl-name">${d.name}</h3>
+            <div class="dl-year">${d.approved}</div>
+          </div>
+          <p class="dl-brand">${d.brand}</p>
+          
+          <div class="dl-indication">
+            <span>&#8225;</span>
+            ${d.indication}
+          </div>
+          <p class="dl-mechanism">${d.mechanism}</p>
+          
+          <div class="dl-novelty">
+            <i>&#128161;</i>
+            <p>${d.novelty}</p>
+          </div>
+          
+          <div class="dl-status" style="color: ${d.fda_approved ? '#00FF88' : '#00A3FF'}">
+            ${d.fda_approved ? '&#10003;' : '&#8987;'} ${d.status.toUpperCase()}
+          </div>
+          
+          <button class="dl-action" onclick="setMolecule('${d.name}'); switchTab('repurpose');">
+            Analyse repurposing potential &rarr;
+          </button>
+        `;
+        
+        if (d.fda_approved) {
+          fdaGrid.appendChild(card);
+        } else {
+          nonFdaGrid.appendChild(card);
+        }
+      });
+    }
+
+    document.addEventListener("DOMContentLoaded", renderDrugLibrary);
+  </script>
 </div>
+
 
 
 
@@ -749,6 +840,73 @@
     <div id="pubmed-raw"     class="raw-panel"></div>
   </div>
 </section>
+
+<div id="tokens-modal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; z-index: 99999; background: rgba(0,0,0,0.7); backdrop-filter: blur(4px); align-items: center; justify-content: center;">
+  <div style="background: #1e1e1e; border: 1px solid #2a2a2a; border-radius: 6px; width: 660px; max-height: 80vh; overflow-y: auto; padding: 24px; position: relative; box-shadow: 0 20px 40px rgba(0,0,0,0.5);">
+    <button onclick="document.getElementById('tokens-modal').style.display='none'" style="position: absolute; top: 12px; right: 16px; background: transparent; border: none; color: #666; font-size: 24px; cursor: pointer; line-height: 1; z-index: 1;">&times;</button>
+    <div id="tokens-modal-body" style="display: flex; flex-direction: column;">
+      <div style="color: #555; font-family: 'Inter', sans-serif; font-size: 13px; text-align: center; padding: 40px 0;">Loading usage data...</div>
+    </div>
+  </div>
+</div>
+
+<script>
+function openTokenModal() {
+  const modal = document.getElementById('tokens-modal');
+  modal.style.display = 'flex';
+  fetchTokenUsage();
+}
+
+function fetchTokenUsage() {
+  fetch('/api/token_usage')
+    .then(r => r.json())
+    .then(data => renderTokenModal(data))
+    .catch(() => {
+      document.getElementById('tokens-modal-body').innerHTML =
+        '<div style="color:#f44;font-family:Inter,sans-serif;font-size:13px;text-align:center;padding:40px 0;">Failed to load token usage.</div>';
+    });
+}
+
+function renderTokenModal(data) {
+  const body = document.getElementById('tokens-modal-body');
+  let html = '';
+
+  data.items.forEach((item, i) => {
+    const isLast = i === data.items.length - 1;
+    const pct = item.pct;
+    const segments = 5;
+    const filledSegments = Math.round(pct * segments);
+
+    // Color logic: green > 60%, yellow 30-60%, red < 30%
+    let barColor = '#4ade80';
+    if (pct < 0.3) barColor = '#f87171';
+    else if (pct < 0.6) barColor = '#facc15';
+
+    let segmentsHtml = '';
+    for (let s = 0; s < segments; s++) {
+      const bg = s < filledSegments ? barColor : '#333';
+      segmentsHtml += `<div style="height:4px;border-radius:2px;flex:1;background:${bg};transition:background 0.4s ease;"></div>`;
+    }
+
+    html += `
+      <div style="padding:16px 0;${isLast ? '' : 'border-bottom:1px solid #2a2a2a;'}">
+        <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:4px;">
+          <span style="color:#e0e0e0;font-family:'Inter',sans-serif;font-size:14px;font-weight:500;">${item.label}</span>
+          <span style="color:#777;font-family:'Inter',sans-serif;font-size:12px;">${data.refresh}</span>
+        </div>
+        <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:10px;">
+          <span style="color:#555;font-family:'Inter',sans-serif;font-size:11px;">${item.model}</span>
+          <span style="color:${barColor};font-family:'Space Grotesk',sans-serif;font-size:11px;font-weight:600;">${item.remaining} / ${item.max} tokens remaining</span>
+        </div>
+        <div style="display:flex;gap:6px;width:100%;">
+          ${segmentsHtml}
+        </div>
+      </div>`;
+  });
+
+  body.innerHTML = html;
+}
+</script>
 
 <div class="error-toast hidden" id="error-toast"></div>
 <script src="/static/js/main.js"></script>

@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Sign Up — RepurposeAI</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=Noto+Serif:ital,wght@0,400;0,700;1,400&family=Inter:wght@400;600;700&family=Space+Grotesk:wght@400;500;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/static/css/auth.css"/>
+  <script src="https://kit.fontawesome.com/64d58efce2.js" crossorigin="anonymous"></script>
+</head>
+<body class="auth-page">
+
+  <header class="auth-header">
+    <div class="auth-logo">Repurpose<span>AI</span></div>
+    <div class="auth-links">
+      <a href="/login" class="auth-legal-link">Sign In</a>
+    </div>
+  </header>
+
+  <main class="auth-container">
+    <div class="auth-form-wrapper">
+      <div class="auth-card">
+        <div class="auth-card-header">
+          <div class="auth-card-icon-main"><i class="fas fa-user-plus"></i></div>
+          <h2 class="auth-card-title">Researcher Registration</h2>
+          <div class="auth-card-subtitle">Request access to the discovery swarm</div>
+        </div>
+
+        <form action="/signup" method="POST">
+          <div class="auth-form-group">
+            <label class="auth-label">Username</label>
+            <div class="auth-input-wrapper">
+              <input type="text" name="username" class="auth-input" placeholder="Desired username" required/>
+              <i class="fas fa-user auth-input-icon"></i>
+            </div>
+          </div>
+
+          <div class="auth-form-group">
+            <label class="auth-label">Password</label>
+            <div class="auth-input-wrapper">
+              <input type="password" name="password" class="auth-input" placeholder="••••••••••••" required/>
+              <i class="fas fa-lock auth-input-icon"></i>
+            </div>
+          </div>
+
+          <div class="auth-form-group">
+            <label class="auth-label">Mobile Number</label>
+            <div class="auth-input-wrapper auth-input-with-button">
+              <div style="position:relative; flex:1">
+                <input type="tel" name="mobile" class="auth-input" placeholder="+1 (555) 000-0000" required/>
+                <i class="fas fa-phone auth-input-icon"></i>
+              </div>
+              <button type="button" class="auth-secondary-btn">Get OTP</button>
+            </div>
+          </div>
+
+          <div class="auth-form-group">
+            <label class="auth-label">OTP Verification</label>
+            <div class="auth-input-wrapper auth-input-with-button">
+               <div style="position:relative; flex:1">
+                <input type="text" name="otp" class="auth-input" placeholder="Enter 6-digit OTP" required/>
+                <i class="fas fa-shield-alt auth-input-icon"></i>
+              </div>
+              <button type="button" class="auth-secondary-btn" style="border-color: #00FF88; background: rgba(0,255,136,0.15)">Verify</button>
+            </div>
+          </div>
+
+          {% if error %}
+          <div style="color: #ff4d4d; text-align:center; margin-bottom:16px; font-size:14px;">{{ error }}</div>
+          {% endif %}
+
+          <button type="submit" class="auth-submit-btn">Initialize Connection</button>
+        </form>
+
+        <div class="auth-footer">
+          Already a researcher? <a href="/login" class="auth-link">Sign In</a>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <script>
+    const sendOtpBtn = document.querySelector('.auth-secondary-btn:nth-of-type(1)');
+    const verifyOtpBtn = document.querySelector('.auth-secondary-btn:nth-of-type(2)');
+    const mobileInput = document.querySelector('input[name="mobile"]');
+    const otpInput = document.querySelector('input[name="otp"]');
+    
+    let isOtpVerified = false;
+
+    // Send OTP (Voice API)
+    sendOtpBtn.addEventListener('click', async () => {
+      const mobile = mobileInput.value.trim();
+      if (!mobile) return alert("Please enter mobile number");
+      
+      sendOtpBtn.innerText = "Calling...";
+      sendOtpBtn.disabled = true;
+
+      try {
+        const res = await fetch('/api/send_otp', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ mobile })
+        });
+        const data = await res.json();
+        if (data.status === 'Success') {
+          alert("Voice OTP call initiated. Please answer your phone.");
+          sendOtpBtn.innerText = "Resend";
+        } else {
+          alert("Error: " + data.message);
+          sendOtpBtn.innerText = "Get OTP";
+        }
+      } catch (err) {
+        alert("Network Error");
+        sendOtpBtn.innerText = "Get OTP";
+      } finally {
+        sendOtpBtn.disabled = false;
+      }
+    });
+
+    // Verify OTP
+    verifyOtpBtn.addEventListener('click', async () => {
+      const otp = otpInput.value.trim();
+      if (!otp) return alert("Please enter OTP");
+
+      verifyOtpBtn.innerText = "...";
+      
+      try {
+        const res = await fetch('/api/verify_otp', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ otp })
+        });
+        const data = await res.json();
+        if (data.status === 'Success') {
+          isOtpVerified = true;
+          verifyOtpBtn.innerText = "Verified";
+          verifyOtpBtn.style.color = "#101412";
+          verifyOtpBtn.style.background = "#00FF88";
+          otpInput.disabled = true;
+          mobileInput.disabled = true;
+        } else {
+          alert("Invalid OTP");
+          verifyOtpBtn.innerText = "Verify";
+        }
+      } catch (err) {
+        alert("Verification Error");
+        verifyOtpBtn.innerText = "Verify";
+      }
+    });
+
+    // Block submission if not verified
+    document.querySelector('form').addEventListener('submit', (e) => {
+      if (!isOtpVerified) {
+        e.preventDefault();
+        alert("Please verify your mobile number via Voice OTP before registering.");
+      }
+    });
+  </script>
+
+  <footer class="auth-bottom-nav">
+    <div class="auth-legal">
+      <a href="#" class="auth-legal-link">Privacy Protocol</a>
+      <a href="#" class="auth-legal-link">Terms of Research</a>
+      <a href="#" class="auth-legal-link">Ethics Board</a>
+      <a href="#" class="auth-legal-link">Contact Lab</a>
+    </div>
+    <div class="auth-copyright">
+      © 2024 REPURPOSEAI. SYNTHETIC ALCHEMY FOR DRUG DISCOVERY.
+    </div>
+  </footer>
+
+</body>
+</html>

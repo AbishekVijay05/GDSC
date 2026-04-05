@@ -1,4 +1,5 @@
 import aiohttp, json, os
+from .token_tracker import record_usage
 
 # ── NVIDIA NIM API ─────────────────────────────────────────────────────────
 NVIDIA_API_URL = "https://integrate.api.nvidia.com/v1/chat/completions"
@@ -68,6 +69,8 @@ Instructions:
             ) as resp:
                 if resp.status == 200:
                     data = await resp.json()
+                    usage = data.get("usage", {})
+                    record_usage("followup", usage.get("total_tokens", 400))
                     return data["choices"][0]["message"]["content"].strip()
                 else:
                     return f"Could not get answer (NVIDIA API error {resp.status})."

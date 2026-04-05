@@ -1,5 +1,5 @@
 """
-intent_translator.py — Natural-language to structured-constraint translator.
+intent_translator.py - Natural-language to structured-constraint translator.
 
 Uses NVIDIA NIM LLM to parse casual user feedback into structured constraints
 that the pipeline can act on.
@@ -10,8 +10,9 @@ Intent types:
   - new_search         : user wants to analyze a new drug from scratch
   - clarification      : user is responding to a clarification question
   - general_question   : user is asking a follow-up question
-  - ambiguous          : feedback is too vague — ask a clarifying question
+  - ambiguous          : feedback is too vague - ask a clarifying question
 """
+from .token_tracker import record_usage
 
 import aiohttp
 import json
@@ -108,6 +109,8 @@ Rules:
             ) as resp:
                 if resp.status == 200:
                     data = await resp.json()
+                    usage = data.get("usage", {})
+                    record_usage("intent_translator", usage.get("total_tokens", 500))
                     text = data["choices"][0]["message"]["content"].strip()
                     # Strip markdown fences if present
                     if "```" in text:
@@ -143,6 +146,7 @@ def _fallback_parse(user_message):
     Simple rule-based fallback when the LLM is unavailable.
     Handles the most common patterns.
     """
+    record_usage("intent_translator", 25)  # estimated tokens for local parsing
     msg = user_message.lower().strip()
 
     search_prefixes = [

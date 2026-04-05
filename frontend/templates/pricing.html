@@ -1,0 +1,309 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Pricing — RepurposeAI</title>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&amp;family=Noto+Serif:ital,wght@0,700;0,900;1,700&amp;family=Space+Grotesk:wght@300;400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "surface-bright": "#363a38",
+                        "on-primary": "#003919",
+                        "primary-container": "#00ff88",
+                        "on-primary-fixed": "#00210c",
+                        "tertiary-container": "#ffdb79",
+                        "surface-container": "#1c211e",
+                        "tertiary-fixed-dim": "#e5c364",
+                        "tertiary-fixed": "#ffe08d",
+                        "surface-container-lowest": "#0b0f0d",
+                        "on-tertiary-container": "#795f01",
+                        "on-tertiary-fixed-variant": "#584400",
+                        "inverse-on-surface": "#2d312f",
+                        "surface-dim": "#101412",
+                        "on-secondary-container": "#94f0ab",
+                        "on-primary-container": "#007139",
+                        "inverse-surface": "#e0e3df",
+                        "primary": "#f1ffef",
+                        "surface-tint": "#00e479",
+                        "on-primary-fixed-variant": "#005228",
+                        "on-error": "#690005",
+                        "background": "#101412",
+                        "on-surface": "#e0e3df",
+                        "on-tertiary": "#3d2f00",
+                        "secondary-fixed-dim": "#7eda96",
+                        "surface": "#101412",
+                        "secondary-container": "#027038",
+                        "outline": "#849585",
+                        "surface-container-low": "#181c1a",
+                        "on-secondary-fixed": "#00210c",
+                        "surface-container-highest": "#313633",
+                        "on-secondary": "#003919",
+                        "error": "#ffb4ab",
+                        "tertiary": "#fffaf7",
+                        "secondary": "#7eda96",
+                        "secondary-fixed": "#9af7b0",
+                        "on-error-container": "#ffdad6",
+                        "primary-fixed": "#60ff99",
+                        "on-surface-variant": "#b9cbb9",
+                        "outline-variant": "#3b4b3d",
+                        "inverse-primary": "#006d37",
+                        "on-secondary-fixed-variant": "#005228",
+                        "on-background": "#e0e3df",
+                        "surface-container-high": "#272b28",
+                        "primary-fixed-dim": "#00e479",
+                        "surface-variant": "#313633",
+                        "error-container": "#93000a",
+                        "on-tertiary-fixed": "#241a00"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0.25rem",
+                        "lg": "0.5rem",
+                        "xl": "0.75rem",
+                        "full": "9999px"
+                    },
+                    "fontFamily": {
+                        "headline": ["Noto Serif"],
+                        "body": ["Inter"],
+                        "label": ["Space Grotesk"]
+                    }
+                },
+            },
+        }
+    </script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        .glass-glow {
+            background: linear-gradient(135deg, rgba(0, 255, 136, 0.05) 0%, rgba(16, 20, 18, 0) 100%);
+        }
+        .hero-glow {
+            background: radial-gradient(circle at 50% -20%, rgba(0, 255, 136, 0.15) 0%, rgba(16, 20, 18, 0) 70%);
+        }
+    </style>
+</head>
+<body class="bg-background text-on-surface font-body selection:bg-primary-container selection:text-on-primary-container">
+<!-- TopNavBar -->
+<nav class="fixed top-0 w-full z-50 bg-[#101412]/80 backdrop-blur-xl bg-gradient-to-b from-[#181c1a] to-transparent">
+<div class="flex justify-between items-center px-8 h-20 w-full max-w-none">
+<a href="/" style="text-decoration: none;"><div class="text-2xl font-black tracking-tighter text-[#f1ffef] font-headline">RepurposeAI</div></a>
+<div class="hidden md:flex items-center space-x-12">
+<a class="text-[#f1ffef]/70 font-label uppercase tracking-widest text-xs hover:text-[#00ff88] transition-colors duration-300" href="/">Platform</a>
+<a class="text-[#00ff88] font-bold border-b-2 border-[#00ff88] pb-1 font-label uppercase tracking-widest text-xs" href="/pricing">Pricing</a>
+</div>
+<div class="flex items-center space-x-6">
+<div class="flex items-center space-x-4 text-[#f1ffef]/70">
+<span class="material-symbols-outlined hover:text-[#00ff88] cursor-pointer">science</span>
+<span class="material-symbols-outlined hover:text-[#00ff88] cursor-pointer">account_circle</span>
+</div>
+<button onclick="window.location.href='/'" class="bg-primary-container text-on-primary-container px-6 py-2.5 rounded-lg font-label font-bold text-sm tracking-wide transition-all active:scale-95 duration-200 hover:shadow-[0_0_20px_rgba(0,255,136,0.3)]">
+                    Start Discovery
+                </button>
+</div>
+</div>
+</nav>
+<main class="pt-32 pb-20 hero-glow">
+<div class="max-w-7xl mx-auto px-8">
+<!-- Header Section -->
+<div class="mb-24 max-w-3xl">
+<span class="font-label text-primary-container text-xs font-bold tracking-[0.3em] uppercase mb-4 block">Scientific Tiering</span>
+<h1 class="text-6xl md:text-7xl font-headline font-black text-primary leading-tight tracking-tighter mb-8">
+                    Invest in the <br/><span class="italic text-primary-container">Future of Medicine.</span>
+</h1>
+<p class="text-xl text-on-surface-variant font-light max-w-2xl leading-relaxed">
+                    Access our proprietary multi-agent swarm architecture and neural synthesis engine to accelerate drug repurposing from years to weeks.
+                </p>
+</div>
+<!-- Pricing Grid -->
+<div class="grid grid-cols-1 md:grid-cols-3 gap-8 items-stretch">
+<!-- Free - Explore -->
+<div class="bg-surface-container-low rounded-xl p-10 flex flex-col border border-outline-variant/10 relative overflow-hidden group">
+<div class="absolute top-0 right-0 p-8 opacity-5 group-hover:opacity-10 transition-opacity">
+<span class="material-symbols-outlined text-8xl" style="font-variation-settings: 'FILL' 0;">biotech</span>
+</div>
+<div class="mb-12">
+<h3 class="font-label text-on-surface-variant uppercase tracking-widest text-sm mb-2">Free</h3>
+<div class="font-headline text-4xl font-bold text-primary mb-6">Explore</div>
+<div class="flex items-baseline gap-1">
+<span class="text-5xl font-headline font-bold text-primary">$0</span>
+<span class="text-on-surface-variant/60 font-label text-sm uppercase">/ forever</span>
+</div>
+</div>
+<div class="flex-grow space-y-6 mb-12">
+<div class="flex items-start gap-3">
+<span class="material-symbols-outlined text-primary-container text-xl" style="font-variation-settings: 'FILL' 1;">check_circle</span>
+<span class="text-on-surface/80 text-sm leading-relaxed">Chatbot Analysis (500 tokens)</span>
+</div>
+<div class="flex items-start gap-3">
+<span class="material-symbols-outlined text-primary-container text-xl" style="font-variation-settings: 'FILL' 1;">check_circle</span>
+<span class="text-on-surface/80 text-sm leading-relaxed">Repurposing Report (1500 tokens)</span>
+</div>
+<div class="flex items-start gap-3">
+<span class="material-symbols-outlined text-primary-container text-xl" style="font-variation-settings: 'FILL' 1;">check_circle</span>
+<span class="text-on-surface/80 text-sm leading-relaxed">Disease-to-Drug Search (300 tokens)</span>
+</div>
+<div class="flex items-start gap-3">
+<span class="material-symbols-outlined text-primary-container text-xl" style="font-variation-settings: 'FILL' 1;">check_circle</span>
+<span class="text-on-surface/80 text-sm leading-relaxed">Hypothesis Generation (300 tokens)</span>
+</div>
+<div class="flex items-start gap-3">
+<span class="material-symbols-outlined text-primary-container text-xl" style="font-variation-settings: 'FILL' 1;">check_circle</span>
+<span class="text-on-surface/80 text-sm leading-relaxed">Follow-up Q&amp;A (500 tokens)</span>
+</div>
+<div class="flex items-start gap-3">
+<span class="material-symbols-outlined text-outline-variant text-xl">block</span>
+<span class="text-on-surface/40 text-sm leading-relaxed line-through">Multi-agent Swarm Architecture</span>
+</div>
+</div>
+<button onclick="window.location.href='/signup'" class="w-full py-4 border border-outline-variant hover:border-primary-container hover:text-primary-container transition-all rounded-lg font-label font-bold uppercase tracking-widest text-xs">
+                        Begin Research
+                    </button>
+</div>
+<!-- Pro - Researcher -->
+<div class="bg-surface-container-highest rounded-xl p-10 flex flex-col border border-primary-container/20 relative shadow-2xl scale-105 z-10 glass-glow">
+<div class="absolute top-0 left-0 w-full h-1 bg-primary-container"></div>
+<div class="mb-12">
+<div class="flex justify-between items-start">
+<div>
+<h3 class="font-label text-primary-container uppercase tracking-widest text-sm mb-2">Pro</h3>
+<div class="font-headline text-4xl font-bold text-primary mb-6">Researcher</div>
+</div>
+<span class="bg-primary-container/10 text-primary-container px-3 py-1 rounded font-label text-[10px] font-bold uppercase tracking-tighter">Most Popular</span>
+</div>
+<div class="flex items-baseline gap-1">
+<span class="text-5xl font-headline font-bold text-primary">$29</span>
+<span class="text-on-surface-variant/60 font-label text-sm uppercase">/ month</span>
+</div>
+</div>
+<div class="flex-grow space-y-6 mb-12">
+<div class="flex items-start gap-3">
+<span class="material-symbols-outlined text-primary-container text-xl" style="font-variation-settings: 'FILL' 1;">check_circle</span>
+<span class="text-on-surface text-sm leading-relaxed font-medium">Unlimited drug analyses</span>
+</div>
+<div class="flex items-start gap-3">
+<span class="material-symbols-outlined text-primary-container text-xl" style="font-variation-settings: 'FILL' 1;">check_circle</span>
+<span class="text-on-surface text-sm leading-relaxed font-medium">6-agent parallel research pipeline</span>
+</div>
+<div class="flex items-start gap-3">
+<span class="material-symbols-outlined text-primary-container text-xl" style="font-variation-settings: 'FILL' 1;">check_circle</span>
+<span class="text-on-surface text-sm leading-relaxed font-medium">Conversational AI research assistant</span>
+</div>
+<div class="flex items-start gap-3">
+<span class="material-symbols-outlined text-primary-container text-xl" style="font-variation-settings: 'FILL' 1;">check_circle</span>
+<span class="text-on-surface text-sm leading-relaxed font-medium">Batch mode — compare up to 5 drugs</span>
+</div>
+<div class="flex items-start gap-3">
+<span class="material-symbols-outlined text-primary-container text-xl" style="font-variation-settings: 'FILL' 1;">check_circle</span>
+<span class="text-on-surface text-sm leading-relaxed font-medium">PDF report export &amp; sharing</span>
+</div>
+<div class="flex items-start gap-3">
+<span class="material-symbols-outlined text-primary-container text-xl" style="font-variation-settings: 'FILL' 1;">check_circle</span>
+<span class="text-on-surface text-sm leading-relaxed font-medium">Full analysis history &amp; session memory</span>
+</div>
+<div class="flex items-start gap-3">
+<span class="material-symbols-outlined text-outline-variant text-xl">block</span>
+<span class="text-on-surface/40 text-sm leading-relaxed line-through">Team access &amp; shared workspaces</span>
+</div>
+<div class="flex items-start gap-3">
+<span class="material-symbols-outlined text-outline-variant text-xl">block</span>
+<span class="text-on-surface/40 text-sm leading-relaxed line-through">Priority API access</span>
+</div>
+</div>
+<button onclick="window.location.href='/signup'" class="w-full py-4 bg-primary-container text-on-primary-container hover:shadow-[0_0_30px_rgba(0,255,136,0.4)] transition-all rounded-lg font-label font-bold uppercase tracking-widest text-xs">
+                        Start Professional Lab
+                    </button>
+</div>
+<!-- Enterprise - Lab -->
+<div class="bg-surface-container-low rounded-xl p-10 flex flex-col border border-outline-variant/10 relative overflow-hidden group">
+<div class="absolute top-0 right-0 p-8 opacity-5 group-hover:opacity-10 transition-opacity">
+<span class="material-symbols-outlined text-8xl" style="font-variation-settings: 'FILL' 0;">domain</span>
+</div>
+<div class="mb-12">
+<h3 class="font-label text-on-surface-variant uppercase tracking-widest text-sm mb-2">Lab</h3>
+<div class="font-headline text-4xl font-bold text-primary mb-6">Team</div>
+<div class="flex items-baseline gap-1">
+<span class="text-5xl font-headline font-bold text-primary">$129</span>
+<span class="text-on-surface-variant/60 font-label text-sm uppercase">/ month</span>
+</div>
+</div>
+<div class="flex-grow space-y-6 mb-12">
+<div class="flex items-start gap-3">
+<span class="material-symbols-outlined text-primary-container text-xl" style="font-variation-settings: 'FILL' 1;">check_circle</span>
+<span class="text-on-surface/80 text-sm leading-relaxed">Everything in Pro, plus:</span>
+</div>
+<div class="flex items-start gap-3">
+<span class="material-symbols-outlined text-primary-container text-xl" style="font-variation-settings: 'FILL' 1;">check_circle</span>
+<span class="text-on-surface/80 text-sm leading-relaxed">Up to 5 team members with shared access</span>
+</div>
+<div class="flex items-start gap-3">
+<span class="material-symbols-outlined text-primary-container text-xl" style="font-variation-settings: 'FILL' 1;">check_circle</span>
+<span class="text-on-surface/80 text-sm leading-relaxed">Shared project workspace &amp; analysis history</span>
+</div>
+<div class="flex items-start gap-3">
+<span class="material-symbols-outlined text-primary-container text-xl" style="font-variation-settings: 'FILL' 1;">check_circle</span>
+<span class="text-on-surface/80 text-sm leading-relaxed">Priority synthesis — reduced queue times</span>
+</div>
+<div class="flex items-start gap-3">
+<span class="material-symbols-outlined text-primary-container text-xl" style="font-variation-settings: 'FILL' 1;">check_circle</span>
+<span class="text-on-surface/80 text-sm leading-relaxed">10-language multilingual reports</span>
+</div>
+<div class="flex items-start gap-3">
+<span class="material-symbols-outlined text-primary-container text-xl" style="font-variation-settings: 'FILL' 1;">check_circle</span>
+<span class="text-on-surface/80 text-sm leading-relaxed">Ayurvedic &amp; traditional medicine analysis</span>
+</div>
+<div class="flex items-start gap-3">
+<span class="material-symbols-outlined text-primary-container text-xl" style="font-variation-settings: 'FILL' 1;">check_circle</span>
+<span class="text-on-surface/80 text-sm leading-relaxed">Dedicated support &amp; onboarding</span>
+</div>
+</div>
+<button onclick="window.location.href='/signup'" class="w-full py-4 border border-outline-variant hover:border-primary-container hover:text-primary-container transition-all rounded-lg font-label font-bold uppercase tracking-widest text-xs">
+                        Start Team Lab
+                    </button>
+</div>
+</div>
+<!-- Bento Detail Section -->
+<div class="mt-32 grid grid-cols-1 md:grid-cols-4 gap-4">
+<div class="md:col-span-2 bg-surface-container-low rounded-2xl p-12 flex flex-col justify-between aspect-video md:aspect-auto">
+<div>
+<h4 class="font-headline text-3xl text-primary mb-4">Neural Grid Reliability</h4>
+<p class="text-on-surface-variant font-light leading-relaxed">Our infrastructure spans across global biolabs, ensuring 99.99% uptime for critical molecular screenings.</p>
+</div>
+<div class="flex gap-4 mt-8">
+<div class="flex-1 h-1 bg-primary-container/20 rounded-full overflow-hidden">
+<div class="w-4/5 h-full bg-primary-container"></div>
+</div>
+<span class="font-label text-xs text-primary-container font-bold">80% SYNTHESIS CAPACITY</span>
+</div>
+</div>
+<div class="md:col-span-2 relative rounded-2xl overflow-hidden min-h-[300px]">
+<img class="absolute inset-0 w-full h-full object-cover opacity-60 group-hover:scale-105 transition-transform duration-700" data-alt="Close-up of futuristic laboratory equipment with neon green glowing fluids and liquid nitrogen vapor in a dark high-tech environment" src="https://lh3.googleusercontent.com/aida-public/AB6AXuALjQuilD980ni-oMa-BZvtMSCRdUAMo3B7MW4YPHDtgewvUhpLp弱soaP2SCn0f27ahK6Mi0rj8jr4e0gX5H-LtFSPqna6Bpz3Xga9YSoeeZZtIq3RbTwJ0kQqJXJ5UXQrjCgF1OULn95lx_pFqVtIcrsU8DFQoIBFq72c93J3yl9NcY-FGqKMAsQuHuDAawUA6incPAwY1rutQkOqJPfjZJbwLH31aWCg89wHvSIDRDAROJrVsn8v_mL6KaTj1vh9SAVnAmkx0A5PBx"/>
+<div class="absolute inset-0 bg-gradient-to-t from-background via-transparent to-transparent"></div>
+<div class="absolute bottom-0 p-12">
+<h4 class="font-headline text-3xl text-primary">In-Silico Mastery</h4>
+</div>
+</div>
+</div>
+</div>
+</main>
+<!-- Footer -->
+<footer class="bg-[#101412] w-full border-t border-[#3b4b3d]/20 flex flex-col md:flex-row justify-between items-center px-12 py-12 w-full mt-24">
+<div class="mb-8 md:mb-0">
+<div class="text-lg font-bold text-[#f1ffef] font-headline mb-4 uppercase tracking-tighter">RepurposeAI</div>
+<p class="text-[#f1ffef]/40 font-label text-[10px] tracking-widest uppercase">© 2024 RepurposeAI. Synthetic Alchemy for Drug Discovery.</p>
+</div>
+<div class="flex flex-wrap justify-center gap-8 md:gap-12">
+<a class="text-[#f1ffef]/40 font-label text-[10px] tracking-widest uppercase hover:text-[#00ff88] transition-all opacity-80 hover:opacity-100" href="/">Documentation</a>
+<a class="text-[#f1ffef]/40 font-label text-[10px] tracking-widest uppercase hover:text-[#00ff88] transition-all opacity-80 hover:opacity-100" href="/">Ethical AI</a>
+<a class="text-[#f1ffef]/40 font-label text-[10px] tracking-widest uppercase hover:text-[#00ff88] transition-all opacity-80 hover:opacity-100" href="/">Privacy</a>
+<a class="text-[#f1ffef]/40 font-label text-[10px] tracking-widest uppercase hover:text-[#00ff88] transition-all opacity-80 hover:opacity-100" href="/">Contact Lab</a>
+</div>
+</footer>
+</body></html>

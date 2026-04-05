@@ -1,6 +1,6 @@
 {
   "functions": {
-    "api/index.py": {
+    "frontend/app.py": {
       "runtime": "python3.11"
     }
   }
